@@ -15,8 +15,8 @@ The project is designed for both industrial and private use cases, including tra
 - Background operation (Foreground Service, auto-start)
 
 ## Supported Navigation Data Protocols
-- Wialon IPS
 - OsmAnd (Traccar-compatible)
+- Wialon IPS
 
 ## Plugins
 All application functionality is implemented via plugins.
@@ -26,5 +26,4 @@ Currently implemented plugins include:
 The main idea of the Scenarios plugin is to collect required information from the smartphone and transmit it to navigation servers together with GPS coordinates.
 
 ## Author
-Development and architecture — Artem Nagumanov
-Contact: nagumanov174@gmail.com
+Contact: diagnoz174@gmail.com
