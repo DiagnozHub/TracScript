@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TracScript</string>
+    <string name="accessibility_description">Monitoring and automation</string>
+    <string name="customize_dashboards_view">Customize your dashboards view</string>
+    <string name="pin_dashboards_hint">Pin the required information blocks, and your dashboards will appear here.</string>
+    <string name="configure">Configure</string>
+    <string name="general_settings">General settings</string>
+    <string name="tracscript_settings_description">TracScript runtime parameters and service tools for debugging.</string>
+    <string name="settings">Settings</string>
+    <string name="general">General</string>
+    <string name="prevent_screen_off">Prevent screen from turning off</string>
+    <string name="plugin_settings">Plugin settings</string>
+    <string name="service_tools">Service tools</string>
+    <string name="open_accessibility_settings">Open accessibility settings</string>
+    <string name="open_node_dump">Open node dump</string>
+    <string name="open_log">Open log</string>
+    <string name="close">Close</string>
+    <string name="no_plugins_available">No plugins available</string>
+    <string name="settings_reset_to_default">Settings have been reset to default</string>
+    <string name="background_location_granted">Background location access granted, GPS enabled</string>
+    <string name="battery_optimization_warning">Now allow unrestricted battery usage, otherwise GPS will stop when the screen is off</string>
+    <string name="background_location_required_warning">Without background location access, GPS may not work when the screen is off.</string>
+    <string name="location_permission_required">Without location permission, the plugin will not work.</string>
+    <string name="gps_unrestricted">GPS is enabled without battery restrictions</string>
+    <string name="battery_optimization_required">Allow unrestricted battery usage, otherwise GPS will stop when the screen is off</string>
+    <string name="notification_permission_required">Without notification permission, the GPS plugin will not be enabled.</string>
+    <string name="enabled">Enabled</string>
+    <string name="show_on_main_screen">Show on the main screen</string>
+    <string name="server_address">Server address</string>
+    <string name="server_port">Server port</string>
+    <string name="device_imei">Device IMEI</string>
+    <string name="device_password">Device password</string>
+    <string name="gps_filter_settings">GPS filter settings</string>
+    <string name="interval_seconds">Interval, sec</string>
+    <string name="min_distance_meters">Min. distance, m</string>
+    <string name="min_course_change">Min. course change, °</string>
+    <string name="accelerometer">Accelerometer</string>
+    <string name="no_data">No data</string>
+    <string name="recent_motion">Recent motion</string>
+    <string name="fading">Fading</string>
+    <string name="inactive">Inactive</string>
+    <string name="motion_info">
+    Confidence: %1$s%%
+    \nSeconds since event: %2$s
+    \nInterpretation: %3$s
+    </string>
+    <string name="motion_sensitivity">
+    Sensitivity (motionThreshold): %1$s
+    </string>
+    <string name="confidence_threshold">
+    Confidence threshold: %1$s%%
+    </string>
+    <string name="basic">Basic</string>
+    <string name="lock">Lock</string>
+    <string name="unlock">Unlock</string>
+    <string name="gps_android_data">GPS (Android data)</string>
+    <string name="error">Error</string>
+    <string name="error_with_details">
+    Error: %1$s
+    </string>
+    <string name="gps_debug_info">
+    lat: %1$s
+    \nlon: %2$s
+    \nSatellites: %3$s
+    \nTime: %4$s
+    \nAccuracy: %5$s m
+    \nSpeed: %6$s km/h
+    </string>
+    <string name="nmea_raw_data">NMEA (raw data from GPS receiver)</string>
+    <string name="nmea_error_with_details">
+    NMEA error: %1$s
+    </string>
+    <string name="gps_health_info">
+    NMEA stream: %1$s
+    \nFIX: %2$s
+    \nSatellites (GGA): %3$s
+    \nHDOP: %4$s
+    \nQuality: %5$s
+    \nRMC valid: %6$s
+    </string>
+
+    <string name="status_ok">OK</string>
+    <string name="status_yes">yes</string>
+    <string name="status_no">no</string>
+    <string name="not_available">N/A</string>
+
+    <string name="last_nmea_sentence">
+    Last: %1$s
+    </string>
+    <string name="scenarios">Scenarios</string>
+    <string name="repeat_scenario_every">Repeat the scenario every</string>
+    <string name="seconds">sec</string>
+    <string name="scenario_editor">Scenario editor</string>
+    <string name="open_scenario_editor">Open scenario editor</string>
+    <string name="run_scenario">Run scenario</string>
+    <string name="scenario_list">Scenario list</string>
+    <string name="toggle_editor_theme">Toggle editor theme</string>
+    <string name="scenarios_saved">Scenarios saved</string>
+    <string name="save">Save</string>
+    <string name="scenario">Scenario</string>
+    <string name="scenario_default_name">Scenario %1$d</string>
+    <string name="cannot_delete_only_scenario">The only scenario cannot be deleted</string>
+    <string name="nothing_to_delete">Nothing to delete</string>
+    <string name="scenario_deleted_notice">Scenario deleted (don’t forget to press “Save”)</string>
+    <string name="no_scenarios_to_edit">No scenarios to edit</string>
+    <string name="scenario_name">Scenario name</string>
+    <string name="selected_for_editing">Selected for editing</string>
+    <string name="main">Main</string>
+    <string name="make_main_multiline">Make\nprimary</string>
+    <string name="notif_nav_server">Navigation server %1$s:%2$d</string>
+    <string name="background_gps_sending">Background GPS sending</string>
+    <string name="clear">Clear</string>
+
+    <string name="dump_not_created">
+    Dump file has not been created yet.
+    \nEnable research mode and tap on the screen.
+    </string>
+
+    <string name="dump_read_error">
+    Dump file read error: %1$s
+    </string>
+
+    <string name="update">Update</string>
+    <string name="debug_log_empty">debug.log file is empty or not found</string>
+    <string name="nodes_dump">Nodes dump</string>
+    <string name="protocol">Protocol</string>
+    <string name="log_file">Log-file</string>
+    <string name="expl_mode_on">Exploration mode: ON. Tap the screen to inspect coordinates.</string>
+    <string name="expl_mode_off">Exploration mode: OFF</string>
+    <string name="scenario_start_by_command">Scenario started by command</string>
+    <string name="expl_mode_enabling">Enabling exploration mode</string>
+    <string name="expl_mode_disabling">Disabling exploration mode</string>
+    <string name="unknown_command">Unknown command: %1$s</string>
+    <string name="scenario_empty">Scenario is empty</string>
+    <string name="scenario_start_steps">Starting scenario, steps: %1$d</string>
+    <string name="scenario_finished">Scenario finished</string>
+    <string name="scenario_step_delay">Step[%1$d]: DELAY %2$d ms</string>
+    <string name="scenario_step_wait_text">Step[%1$d]: WAIT_TEXT \'%2$s\'</string>
+    <string name="scenario_step_click_text">Step[%1$d]: CLICK_TEXT \'%2$s\'</string>
+    <string name="scenario_step_tap">Step %1$d: TAP x=%2$.3f y=%3$.3f</string>
+    <string name="scenario_step_launch_app">Step[%1$d]: LAUNCH_APP %2$s</string>
+    <string name="scenario_step_close_app">Step[%1$d]: CLOSE_APP %2$s</string>
+    <string name="scenario_step_kill_app_root">Step[%1$d]: KILL_APP_ROOT %2$s</string>
+    <string name="scenario_step_extract_table_by_id">Step[%1$d]: EXTRACT_TABLE_BY_ID id=%2$s file=%3$s</string>
+    <string name="extract_expandable_list">Extracting ExpandableList id=%1$s</string>
+    <string name="command_deprecated">Command is deprecated</string>
+    <string name="scenario_step_send_table_to_bus">Step[%1$d]: SEND_TABLE_TO_BUS file=\'%2$s\'</string>
+    <string name="send_table_file_not_found_or_empty">SEND_TABLE_TO_BUS: file \'%1$s\' not found or empty</string>
+    <string name="send_table_event_sent">SEND_TABLE_TO_BUS: wialon_table_json event sent to bus</string>
+    <string name="scenario_step_delete_file">Step[%1$d]: DELETE_FILE file=\'%2$s\'</string>
+    <string name="scenario_step_back">Step[%1$d]: BACK (GLOBAL_ACTION_BACK)</string>
+    <string name="scenario_if_condition_error">IF: condition error %1$s</string>
+    <string name="scenario_step_if_result">Step[%1$d]: IF %2$s -> %3$b</string>
+    <string name="scenario_step_stop">Step[%1$d]: STOP_SCENARIO — stopping scenario</string>
+    <string name="scenario_step_screen_on">Step[%1$d]: SCREEN_ON</string>
+    <string name="scenario_step_screen_off">Step[%1$d]: SCREEN_OFF</string>
+    <string name="scenario_step_light">Step[%1$d]: LIGHT %2$d</string>
+    <string name="expandable_list_not_found">ExpandableList id=%1$s not found</string>
+    <string name="table_not_found_no_errors_written">Table not found — NO_ERRORS written</string>
+    <string name="table_saved">Table saved to %1$s</string>
+    <string name="extract_table_by_id_error">EXTRACT_TABLE_BY_ID error</string>
+    <string name="click_button_with_text">Clicking button with text: "%1$s"</string>
+    <string name="root_window_null_cannot_click">rootInActiveWindow = null, cannot click "%1$s"</string>
+    <string name="element_with_text_not_found">Element with text not found: "%1$s"</string>
+    <string name="click_text_success">Successfully clicked: "%1$s"</string>
+    <string name="click_text_failed">Failed to click: "%1$s"</string>
+    <string name="click_text_error">Error while clicking: "%1$s"</string>
+    <string name="found_expected_text">Found text: "%1$s"</string>
+    <string name="timeout_while_searching">TIMEOUT while searching: "%1$s"</string>
+    <string name="search_error">Error while searching: "%1$s"</string>
+    <string name="delay_progress">DELAY %1$d/%2$d ms (remaining %3$d ms)</string>
+    <string name="searching_text">Searching for text: "%1$s"</string>
+    <string name="returning_to_home">Returning to home screen...</string>
+    <string name="launching_app">Launching %1$s...</string>
+    <string name="app_active">%1$s is active</string>
+    <string name="app_launch_timeout">Timed out waiting for %1$s to launch</string>
+    <string name="recents_card_not_found">Recents card for %1$s not found</string>
+    <string name="recents_card_container_not_found">Failed to determine recents card container %1$s</string>
+    <string name="swiping_app_from_recents">Swiping %1$s from Recents...</string>
+    <string name="closing_app_via_recents">Closing %1$s via Recents...</string>
+    <string name="root_kill_force_stop">ROOT KILL: am force-stop %1$s</string>
+    <string name="root_kill_error">ROOT KILL: error for %1$s</string>
+    <string name="imei_length_error">IMEI must be between 6 and 14 digits</string>
+    <string name="server_port_placeholder">Port, for example 20332</string>
+    <string name="server_host_placeholder">Server IP address or domain name</string>
+
+
+
+</resources>
