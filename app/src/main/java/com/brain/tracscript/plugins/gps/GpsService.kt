@@ -497,10 +497,15 @@ class GpsService : Service(), CoroutineScope {
                         delay(5_000L)
 
                     } catch (e: Exception) {
-                        // обычная ошибка -> помечаем, чтобы не стопорилось на одном событии
-                        logGps?.e(TAG, "CORE send FAILED (mark sent to skip) id=${core.id} err=${e.message}", e)
-                        repo.markCoreEventSent(core.id)
-                        delay(5_000L)
+
+                        if (isTransientNetworkError(e)) {
+                            logGps?.e(TAG, "CORE send FAILED (network, keep queued) id=${core.id} err=${e.message}", e)
+                            delay(10_000L)
+                        } else {
+                            logGps?.e(TAG, "CORE send FAILED (skip permanent) id=${core.id} err=${e.message}", e)
+                            repo.markCoreEventSent(core.id)
+                            delay(5_000L)
+                        }
                     }
 
                     continue
@@ -529,10 +534,16 @@ class GpsService : Service(), CoroutineScope {
 
                     } catch (e: Exception) {
 
-                        // обычная ошибка -> помечаем, чтобы не стопорилось
-                        logGps?.e(TAG, "GPS send FAILED (mark sent to skip) id=${gps.id} err=${e.message}", e)
-                        repo.markGpsPositionSent(gps.id)
-                        delay(5_000L)
+                        if (isTransientNetworkError(e)) {
+                            // СЕТЬ/ТАЙМАУТ -> НЕ помечаем sent, иначе потеряешь точку
+                            logGps?.e(TAG, "GPS send FAILED (network, keep queued) id=${gps.id} err=${e.message}", e)
+                            delay(10_000L)
+                        } else {
+                            // НЕ сеть -> считаем перманентным, чтобы очередь не клинила
+                            logGps?.e(TAG, "GPS send FAILED (skip permanent) id=${gps.id} err=${e.message}", e)
+                            repo.markGpsPositionSent(gps.id)
+                            delay(5_000L)
+                        }
                     }
 
                     continue
@@ -637,5 +648,25 @@ class GpsService : Service(), CoroutineScope {
         }
     }
 
+    private fun isTransientNetworkError(t: Throwable): Boolean {
+        // разворачиваем цепочку причин до корня
+        var e: Throwable? = t
+        while (e?.cause != null && e.cause !== e) e = e.cause
+
+        return when (e) {
+            is java.net.ConnectException,
+            is java.net.SocketTimeoutException,
+            is java.net.UnknownHostException,
+            is java.net.NoRouteToHostException,
+            is java.io.InterruptedIOException -> true
+            else -> {
+                val msg = (t.message ?: "").lowercase()
+                msg.contains("failed to connect") ||
+                        msg.contains("timeout") ||
+                        msg.contains("unable to resolve host") ||
+                        msg.contains("no route to host")
+            }
+        }
+    }
 
 }
