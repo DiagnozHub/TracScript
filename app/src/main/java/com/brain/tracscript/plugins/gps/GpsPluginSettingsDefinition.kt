@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,41 +15,31 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.brain.tracscript.R
+import com.brain.tracscript.core.DataBusEvent
 import com.brain.tracscript.core.PluginSettingsDefinition
-
-import androidx.compose.ui.draw.alpha
+import com.brain.tracscript.core.TracScriptApp
 import com.brain.tracscript.telemetry.MotionBus
-
-import com.brain.tracscript.telemetry.RawGpsBus
 import com.brain.tracscript.telemetry.Position
+import com.brain.tracscript.telemetry.RawGpsBus
 import com.brain.tracscript.telemetry.RawNmeaBus
 import java.text.SimpleDateFormat
 import java.util.Locale
-
-import android.net.Uri
-import android.provider.Settings
-import androidx.compose.material3.Switch
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
-import com.brain.tracscript.R
-import com.brain.tracscript.core.TracScriptApp
-import com.brain.tracscript.core.DataBusEvent
-
-import androidx.compose.ui.focus.onFocusChanged
+import kotlin.math.round
 
 // ------------------------
 // GPS
@@ -62,7 +54,7 @@ data class GpsConfig(
     val gpsIntervalSec: Int,
     val gpsMinDistanceM: Float,
     val gpsMinAngleDeg: Float,
-    val protocol: GpsProtocolType = GpsProtocolType.WIALON
+    val protocol: GpsProtocolType = GpsProtocolType.OSMAND
 )
 
 object GpsPluginSettingsDefinition : PluginSettingsDefinition {
@@ -86,13 +78,11 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
     const val KEY_ACCEL_CONFIDENCE_MOVING = "accel_conf_moving"
 
     const val KEY_PROTOCOL = "protocol"
-    val DEFAULT_PROTOCOL = GpsProtocolType.WIALON
-
-
+    val DEFAULT_PROTOCOL = GpsProtocolType.OSMAND
 
     const val DEFAULT_GPS_INTERVAL_SEC = 300
-    const val DEFAULT_GPS_MIN_DISTANCE_M = 100f   // 100 meters
-    const val DEFAULT_GPS_MIN_ANGLE_DEG = 10f     // 10 degrees
+    const val DEFAULT_GPS_MIN_DISTANCE_M = 100f
+    const val DEFAULT_GPS_MIN_ANGLE_DEG = 10f
     const val DEFAULT_MOTION_THRESHOLD = 0.80f
     const val DEFAULT_ACCEL_CONFIDENCE_MOVING = 0.10f
 
@@ -106,7 +96,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
     private fun generateImei8(): String {
         val n = kotlin.random.Random.nextInt(0, 100_000_000)
-        return String.format(Locale.US, "%08d", n) // 8 цифр — попадает в 6..14
+        return String.format(Locale.US, "%08d", n)
     }
 
     private fun getOrCreateValidImei(prefs: android.content.SharedPreferences): String {
@@ -117,8 +107,6 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         prefs.edit().putString(KEY_IMEI, gen).apply()
         return gen
     }
-
-
 
     @Composable
     override fun Content() {
@@ -139,7 +127,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         var cardUnlocked by remember { mutableStateOf(false) }
 
         // -------------------------
-        // Live акселерометр (едем/стоим/неизвестно)
+        // Live акселерометр / GPS / NMEA
         // -------------------------
         val motionDebug by MotionBus.debug.collectAsState(initial = null)
 
@@ -151,15 +139,12 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         val nmeaSentence by RawNmeaBus.lastSentence.collectAsState(initial = null)
         val nmeaErr by RawNmeaBus.lastError.collectAsState(initial = null)
 
-
-        var pendingLocationPermissionFlow by remember {
-            mutableStateOf(false)
-        }
-
         // --- состояние из префов ---
         var enabled by remember {
             mutableStateOf(prefs.getBoolean(KEY_ENABLED, DEFAULT_ENABLED))
         }
+
+        var uiEnabled by remember { mutableStateOf(enabled) }
 
         var host by remember {
             mutableStateOf(prefs.getString(KEY_HOST, "") ?: "")
@@ -171,14 +156,10 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             )
         }
 
-        // всегда берём валидный из prefs (или генерим и сохраняем)
         val savedImei = remember { getOrCreateValidImei(prefs) }
-
-        // поле ввода - отдельное, может быть невалидным во время редактирования
         var imeiInput by remember { mutableStateOf(savedImei) }
         var imeiTouched by remember { mutableStateOf(false) }
 
-        // при любом пересоздании экрана/возврате - восстанавливаем именно savedImei в поле
         LaunchedEffect(Unit) {
             imeiInput = getOrCreateValidImei(prefs)
             imeiTouched = false
@@ -216,7 +197,6 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         fun saveProtocol(v: GpsProtocolType) {
             prefs.edit().putString(KEY_PROTOCOL, v.name).apply()
         }
-
 
         fun saveEnabled(value: Boolean) {
             prefs.edit().putBoolean(KEY_ENABLED, value).apply()
@@ -273,21 +253,13 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         }
 
         fun resetToDefaults() {
-            // UI state
-            //enabled = DEFAULT_ENABLED
-            //host = DEFAULT_HOST
-            //portText = DEFAULT_PORT.toString()
-            //imei = DEFAULT_IMEI
             password = DEFAULT_PASSWORD
-
             intervalSecText = DEFAULT_GPS_INTERVAL_SEC.toString()
             minDistanceText = DEFAULT_GPS_MIN_DISTANCE_M.toString().removeSuffix(".0")
             minAngleText = DEFAULT_GPS_MIN_ANGLE_DEG.toString().removeSuffix(".0")
-
             motionThreshold = DEFAULT_MOTION_THRESHOLD
             confPct = DEFAULT_ACCEL_CONFIDENCE_MOVING * 100f
 
-            // prefs
             prefs.edit()
                 .putString(KEY_PASSWORD, DEFAULT_PASSWORD)
                 .putInt(KEY_GPS_INTERVAL_SEC, DEFAULT_GPS_INTERVAL_SEC)
@@ -310,275 +282,315 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             return pm.isIgnoringBatteryOptimizations(context.packageName)
         }
 
-        fun requestIgnoreBatteryOptimizations() {
+        fun requestIgnoreBatteryOptimizationsSafe() {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
 
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                 data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(intent)
+
+            try {
+                if (intent.resolveActivity(context.packageManager) != null) {
+                    context.startActivity(intent)
+                } else {
+                    Toast.makeText(context, context.getString(R.string.battery_settings_not_found), Toast.LENGTH_SHORT).show()
+                }
+            } catch (t: Throwable) {
+                Toast.makeText(context, context.getString(R.string.battery_settings_open_failed, t.javaClass.simpleName), Toast.LENGTH_SHORT).show()
+            }
         }
 
-        fun notifyEnabledChanged(enabled: Boolean) {
-            val bus = (context.applicationContext as TracScriptApp)
-                .pluginRuntime.dataBus
-
+        fun notifyEnabledChanged(isEnabled: Boolean) {
+            val bus = (context.applicationContext as TracScriptApp).pluginRuntime.dataBus
             bus.post(
                 DataBusEvent(
                     type = "plugin_enabled_changed",
                     payload = mapOf(
                         "pluginId" to "gps_wialon",
-                        "enabled" to enabled
+                        "enabled" to isEnabled
                     )
                 )
             )
         }
 
 
-        // --- launchers для разрешений ---
+        // ============================================================
+        // Enable flow (state-driven): notif -> fine -> background -> battery -> SUCCESS
+        // ============================================================
 
-        // BACKGROUND LOCATION (API >= 29)
-        val backgroundLocationPermissionLauncher =
-            rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestPermission()
-            ) { granted ->
-                if (granted) {
-                    if (hasIgnoreBatteryOptimizations()) {
-                        enabled = true
-                        saveEnabled(true)
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.background_location_granted),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        enabled = false
-                        saveEnabled(false)
+        fun hasPerm(p: String): Boolean =
+            ContextCompat.checkSelfPermission(context, p) == PackageManager.PERMISSION_GRANTED
 
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.battery_optimization_warning),
-                            Toast.LENGTH_LONG
-                        ).show()
+        fun needNotifications(): Boolean =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    !hasPerm(Manifest.permission.POST_NOTIFICATIONS)
 
-                        requestIgnoreBatteryOptimizations()
-                    }
-                } else {
-                    enabled = false
-                    saveEnabled(false)
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.background_location_required_warning),
-                        Toast.LENGTH_LONG
-                    ).show()
+        fun bgSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q // 29+
+
+        fun needFine(): Boolean =
+            !hasPerm(Manifest.permission.ACCESS_FINE_LOCATION)
+
+        fun needBackground(): Boolean =
+            bgSupported() && !hasPerm(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+
+        var pendingEnable by rememberSaveable { mutableStateOf(false) }
+        var batteryAsked by rememberSaveable { mutableStateOf(false) }
+        var batteryWaiting by rememberSaveable { mutableStateOf(false) }
+        var flowTick by rememberSaveable { mutableStateOf(0) }
+
+        var appSettingsWaiting by rememberSaveable { mutableStateOf(false) }
+
+        var bgRequestTried by rememberSaveable { mutableStateOf(false) }
+
+        val appSettingsLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) {
+            if (!appSettingsWaiting) return@rememberLauncherForActivityResult
+            appSettingsWaiting = false
+            flowTick++
+        }
+
+        fun openAppSettings(): Boolean {
+            return try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", context.packageName, null)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-            }
-
-        // FINE LOCATION
-        val fineLocationPermissionLauncher =
-            rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestPermission()
-            ) { granted ->
-                if (!granted) {
-                    enabled = false
-                    saveEnabled(false)
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.location_permission_required),
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@rememberLauncherForActivityResult
-                }
-
-                // FINE уже выдано — проверяем/запрашиваем BACKGROUND, если нужно
-                ensureBackgroundLocation(
-                    context = context,
-                    onBackgroundGranted = {
-                        if (hasIgnoreBatteryOptimizations()) {
-                            enabled = true
-                            saveEnabled(true)
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.gps_unrestricted),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        } else {
-                            enabled = false
-                            saveEnabled(false)
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.battery_optimization_required),
-                                Toast.LENGTH_LONG
-                            ).show()
-                            requestIgnoreBatteryOptimizations()
-                        }
-                    },
-                    onBackgroundNeedRequest = {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            backgroundLocationPermissionLauncher.launch(
-                                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                            )
-                        } else {
-                            // до Android 10 BACKGROUND нет — но батарею всё равно проверяем
-                            if (hasIgnoreBatteryOptimizations()) {
-                                enabled = true
-                                saveEnabled(true)
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.gps_unrestricted),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            } else {
-                                enabled = false
-                                saveEnabled(false)
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.battery_optimization_warning),
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                requestIgnoreBatteryOptimizations()
-                            }
-                        }
-                    }
-                )
-            }
-
-        fun hasFineLocation(): Boolean =
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-
-        fun hasBackgroundLocation(): Boolean =
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) true
-            else ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-
-        fun hasNotificationPermission(): Boolean =
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                appSettingsLauncher.launch(intent)
                 true
-            } else {
-                ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
+            } catch (_: Throwable) {
+                false
+            }
+        }
+
+
+        // uiEnabled всегда отражает enabled (и не спорит с flow)
+        LaunchedEffect(enabled) {
+            uiEnabled = enabled
+        }
+
+        fun finalizeEnabled() {
+            pendingEnable = false
+            batteryAsked = false
+            batteryWaiting = false
+
+            enabled = true
+            saveEnabled(true)
+            uiEnabled = true
+            notifyEnabledChanged(true)
+        }
+
+        fun finalizeDisabled(reason: String) {
+            pendingEnable = false
+            batteryAsked = false
+            batteryWaiting = false
+
+            enabled = false
+            saveEnabled(false)
+            uiEnabled = false
+            notifyEnabledChanged(false)
+
+            Toast.makeText(context, reason, Toast.LENGTH_LONG).show()
+        }
+
+
+        val batteryLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) {
+            if (!batteryWaiting) return@rememberLauncherForActivityResult
+            batteryWaiting = false
+        }
+
+        fun launchBatteryScreenIfPossible(): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
+            return try {
+                if (intent.resolveActivity(context.packageManager) != null) {
+                    batteryLauncher.launch(intent)
+                    true
+                } else false
+            } catch (_: Throwable) {
+                false
+            }
+        }
 
-        fun startLocationPermissionFlow() {
-            // 1. Сначала FINE
-            if (!hasFineLocation()) {
-                enabled = false
-                saveEnabled(false)
-                fineLocationPermissionLauncher.launch(
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                )
-                return
+        val notifLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            if (!pendingEnable) return@rememberLauncherForActivityResult
+            if (!granted) {
+                finalizeDisabled(context.getString(R.string.notification_permission_required))
+                return@rememberLauncherForActivityResult
+            }
+            flowTick++
+        }
+
+        val fineLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            if (!pendingEnable) return@rememberLauncherForActivityResult
+            if (!granted) {
+                finalizeDisabled(context.getString(R.string.location_permission_required))
+                return@rememberLauncherForActivityResult
+            }
+            flowTick++
+        }
+
+        val bgLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { _ ->
+            if (!pendingEnable) return@rememberLauncherForActivityResult
+            flowTick++ // дальше движок сам проверит, дали или нет
+        }
+
+        // “двигатель” — всегда один, живёт в LaunchedEffect
+        LaunchedEffect(pendingEnable, flowTick) {
+            if (!pendingEnable) return@LaunchedEffect
+
+            // если ждём возврата с экрана батареи — просто не дёргаем ничего
+            if (batteryWaiting) return@LaunchedEffect
+
+            // 1) REQUIRED permissions
+            if (needNotifications()) {
+                notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                return@LaunchedEffect
             }
 
-            // 2. FINE уже есть — проверяем BACKGROUND
-            if (hasBackgroundLocation()) {
+            if (needFine()) {
+                fineLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                return@LaunchedEffect
+            }
 
-                if (hasIgnoreBatteryOptimizations()) {
-                    enabled = true
-                    saveEnabled(true)
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.gps_unrestricted),
-                        Toast.LENGTH_SHORT
-                    ).show()
+            if (needBackground()) {
+                if (!bgRequestTried) {
+                    bgRequestTried = true
+                    bgLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                    return@LaunchedEffect
+                }
+
+                val launched = openAppSettings()
+                if (launched) {
+                    appSettingsWaiting = true
+                    return@LaunchedEffect
+                }
+
+                finalizeDisabled(context.getString(R.string.bg_location_required))
+                return@LaunchedEffect
+            }
+
+            // 2) Всё нужное есть -> включаемся СРАЗУ
+            finalizeEnabled()
+
+            // 3) OPTIONAL: батарея — просто спросить 1 раз, но не выключать если отказ
+            if (!hasIgnoreBatteryOptimizations() && !batteryAsked) {
+                batteryAsked = true
+
+                val launched = launchBatteryScreenIfPossible()
+                if (launched) {
+                    batteryWaiting = true
                 } else {
-                    enabled = false
-                    saveEnabled(false)
-
+                    // не фейлим, просто информируем
                     Toast.makeText(
                         context,
                         context.getString(R.string.battery_optimization_required),
                         Toast.LENGTH_LONG
                     ).show()
-
-                    requestIgnoreBatteryOptimizations()
-                }
-            } else {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    enabled = false
-                    saveEnabled(false)
-                    backgroundLocationPermissionLauncher.launch(
-                        Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                    )
-                } else {
-                    enabled = true
-                    saveEnabled(true)
                 }
             }
         }
 
+        fun toast(@androidx.annotation.StringRes id: Int) {
+            Toast.makeText(context, context.getString(id), Toast.LENGTH_LONG).show()
+        }
 
-        // POST_NOTIFICATIONS (Android 13+)
-        val notificationsPermissionLauncher =
-            rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.RequestPermission()
-            ) { granted ->
-                if (!granted) {
-                    // Пользователь отказал в уведомлениях — плагин считаем не включённым
-                    pendingLocationPermissionFlow = false
-                    enabled = false
-                    saveEnabled(false)
-
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.notification_permission_required),
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@rememberLauncherForActivityResult
-                }
-
-                // Разрешение на уведомления выдали — продолжаем цепочку с гео-разрешениями,
-                // если включение плагина было инициировано пользователем.
-                if (pendingLocationPermissionFlow) {
-                    pendingLocationPermissionFlow = false
-                    startLocationPermissionFlow()
-                }
+        fun validateBeforeEnable(): Boolean {
+            val h = host.trim()
+            if (h.isEmpty()) {
+                toast(R.string.server_required)      // "Заполни сервер"
+                return false
             }
 
+            val p = portText.trim().toIntOrNull()
+            if (p == null || p !in 1..65535) {
+                toast(R.string.port_required)        // "Заполни порт"
+                return false
+            }
 
-        fun requestEnableWithPermissions() {
-            // Сначала — уведомления (Android 13+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                !hasNotificationPermission()
-            ) {
-                pendingLocationPermissionFlow = true
-                notificationsPermissionLauncher.launch(
-                    Manifest.permission.POST_NOTIFICATIONS
-                )
+            val im = imeiInput.trim()
+            if (!isImeiOk(im)) {
+                toast(R.string.imei_required)        // "Заполни IMEI"
+                return false
+            }
+
+            return true
+        }
+
+        fun onUserToggleEnable(wantEnable: Boolean) {
+            if (!wantEnable) {
+                finalizeDisabled(context.getString(R.string.turned_off))
                 return
             }
 
-            // Уведомления уже есть или API < 33 — сразу идём в гео
-            startLocationPermissionFlow()
+            if (!validateBeforeEnable()) {
+                // важно: не трогаем enabled/uiEnabled/pendingEnable
+                uiEnabled = false // чтобы свитч визуально вернулся назад (если он уже успел щёлкнуть)
+                return
+            }
+
+            pendingEnable = true
+            batteryAsked = false
+            batteryWaiting = false
+            uiEnabled = true
+            bgRequestTried=false
+            flowTick++
         }
 
 
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        fun stopGpsServiceIfRunning() {
+            // если плагин выключен - и так ничего не должно работать
+            if (!enabled) return
+
+            // отменяем возможный enable-flow, чтобы он не “включил назад” после переключения
+            pendingEnable = false
+            batteryWaiting = false
+            batteryAsked = false
+            bgRequestTried = false
+
+            // фактически выключаем плагин -> runtime должен остановить сервис
+            enabled = false
+            saveEnabled(false)
+            uiEnabled = false
+            notifyEnabledChanged(false)
+
+            Toast.makeText(
+                context,
+                context.getString(R.string.service_stopped_due_to_protocol_change),
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+
+
+        // ============================================================
+        // UI
+        // ============================================================
+
+        Column(modifier = Modifier.fillMaxWidth()) {
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.enabled), modifier = Modifier.weight(1f))
                 Switch(
-                    checked = enabled,
+                    checked = uiEnabled,
+                    enabled = !pendingEnable,
                     onCheckedChange = { checked ->
-                        if (!checked) {
-                            enabled = false
-                            saveEnabled(false)
-                            notifyEnabledChanged(false)
-                        } else {
-                            requestEnableWithPermissions()
-                            notifyEnabledChanged(true)
-                        }
+                        onUserToggleEnable(checked)
                     }
                 )
             }
@@ -609,44 +621,39 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(
-                    1.dp,
-                    MaterialTheme.colorScheme.outline
-                ),
-                colors = CardDefaults.cardColors(
-                    containerColor = androidx.compose.ui.graphics.Color.Transparent
-                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Row(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
                         onClick = {
-                            protocol = GpsProtocolType.WIALON
-                            saveProtocol(protocol)
-                        },
-                        border = if (protocol == GpsProtocolType.WIALON)
-                            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-                        else null
-                    ) {
-                        Text("Wialon IPS")
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            protocol = GpsProtocolType.OSMAND
-                            saveProtocol(protocol)
+                            if (protocol != GpsProtocolType.OSMAND) {
+                                stopGpsServiceIfRunning()
+                                protocol = GpsProtocolType.OSMAND
+                                saveProtocol(protocol)
+                            }
                         },
                         border = if (protocol == GpsProtocolType.OSMAND)
                             BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
                         else null
-                    ) {
-                        Text("OsmAnd")
-                    }
+                    ) { Text("Traccar") }
+                    OutlinedButton(
+                        onClick = {
+                            if (protocol != GpsProtocolType.WIALON) {
+                                stopGpsServiceIfRunning()
+                                protocol = GpsProtocolType.WIALON
+                                saveProtocol(protocol)
+                            }
+                        },
+                        border = if (protocol == GpsProtocolType.WIALON)
+                            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                        else null
+                    ) { Text("Wialon IPS") }
                 }
             }
 
@@ -676,7 +683,6 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     if (p != null && p in 1..65535) {
                         savePort(p)
                     } else if (filtered.isEmpty()) {
-                        // если очистили поле — удаляем настройку порта
                         prefs.edit().remove(KEY_PORT).apply()
                     }
                 },
@@ -697,18 +703,13 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                 onValueChange = { new ->
                     imeiTouched = true
                     imeiInput = filterDigits(new)
-
-                    // сохраняем только валидное
-                    if (isImeiOk(imeiInput)) {
-                        saveImei(imeiInput)
-                    }
+                    if (isImeiOk(imeiInput)) saveImei(imeiInput)
                 },
                 label = { Text(stringResource(R.string.device_imei)) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .onFocusChanged { f ->
                         if (!f.isFocused) {
-                            // если ушли с поля и оно невалидно - откатываем к последнему сохранённому
                             if (!isImeiOk(imeiInput)) {
                                 imeiInput = getOrCreateValidImei(prefs)
                                 imeiTouched = false
@@ -721,18 +722,13 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                 supportingText = {
                     if (showImeiError) Text(stringResource(R.string.imei_length_error))
                 },
-                textStyle = androidx.compose.ui.text.TextStyle(
+                textStyle = TextStyle(
                     color = if (showImeiError) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurface
                 )
             )
 
-            //Spacer(modifier = Modifier.height(8.dp))
-
             if (protocol == GpsProtocolType.WIALON) {
-
-                //Spacer(modifier = Modifier.height(8.dp))
-
                 OutlinedTextField(
                     value = password,
                     onValueChange = { new ->
@@ -743,11 +739,8 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
-
                 Spacer(modifier = Modifier.height(8.dp))
             }
-
-            //Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = stringResource(R.string.gps_filter_settings),
@@ -763,16 +756,12 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     val filtered = new.filter { it.isDigit() }
                     intervalSecText = filtered
                     val v = filtered.toIntOrNull()
-                    if (v != null && v > 0) {
-                        saveIntervalSec(v)
-                    }
+                    if (v != null && v > 0) saveIntervalSec(v)
                 },
                 label = { Text(stringResource(R.string.interval_seconds)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number
-                )
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -783,16 +772,12 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     val filtered = new.filter { it.isDigit() || it == '.' }
                     minDistanceText = filtered
                     val v = filtered.toFloatOrNull()
-                    if (v != null && v >= 0f) {
-                        saveMinDistance(v)
-                    }
+                    if (v != null && v >= 0f) saveMinDistance(v)
                 },
                 label = { Text(stringResource(R.string.min_distance_meters)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Decimal
-                )
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -803,16 +788,12 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     val filtered = new.filter { it.isDigit() || it == '.' }
                     minAngleText = filtered
                     val v = filtered.toFloatOrNull()
-                    if (v != null && v >= 0f) {
-                        saveMinAngle(v)
-                    }
+                    if (v != null && v >= 0f) saveMinAngle(v)
                 },
                 label = { Text(stringResource(R.string.min_course_change)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Decimal
-                )
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -822,32 +803,27 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary
             )
+
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
                     .alpha(if (cardUnlocked) 1f else 0.6f),
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(
-                    1.dp,
-                    MaterialTheme.colorScheme.outline
-                ),
-                colors = CardDefaults.cardColors(
-                    containerColor = androidx.compose.ui.graphics.Color.Transparent
-                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp) // ОТСТУП ВНУТРИ
-                )
-                {
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
                     if (motionDebug == null) {
                         Text(stringResource(R.string.no_data), style = MaterialTheme.typography.bodySmall)
                     } else {
                         val d = motionDebug!!
-                        val confPct = d.confidence * 100f
+                        val confPctLocal = d.confidence * 100f
 
                         val stateText = when {
                             d.confidence >= 0.7f -> stringResource(R.string.recent_motion)
@@ -855,60 +831,23 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                             else -> stringResource(R.string.inactive)
                         }
 
-                        val confText = "%.0f".format(confPct)
-
-                        val secondsText = d.secondsSinceMotion
-                            ?.let { "%.1f".format(it) }
-                            ?: "—"
+                        val confText = "%.0f".format(confPctLocal)
+                        val secondsText = d.secondsSinceMotion?.let { "%.1f".format(it) } ?: "—"
 
                         Text(
-                            text = stringResource(
-                                R.string.motion_info,
-                                confText,
-                                secondsText,
-                                stateText
-                            ),
+                            text = stringResource(R.string.motion_info, confText, secondsText, stateText),
                             style = MaterialTheme.typography.bodySmall
                         )
 
                         val rmsEmaText = String.format(Locale.US, "%.4f", d.rmsEma)
-                        Text(
-                            text = "RMS_EMA: $rmsEmaText",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-
-                        /*
-                        Text(
-                            text =
-                            "Уверенность: ${"%.0f".format(confPct)}%\n" +
-                                    "Секунд с события: ${
-                                        d.secondsSinceMotion?.let {
-                                            "%.1f".format(
-                                                it
-                                            )
-                                        } ?: "—"
-                                    }\n" +
-                                    "Интерпретация: $stateText",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        */
+                        Text(text = "RMS_EMA: $rmsEmaText", style = MaterialTheme.typography.bodySmall)
                     }
 
                     val motionThresholdText = "%.2f".format(motionThreshold)
                     Text(
-                        text = stringResource(
-                            R.string.motion_sensitivity,
-                            motionThresholdText
-                        ),
+                        text = stringResource(R.string.motion_sensitivity, motionThresholdText),
                         style = MaterialTheme.typography.bodySmall
                     )
-
-                    /*
-                    Text(
-                        text = "Чувствительность (motionThreshold): ${"%.2f".format(motionThreshold)}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    */
 
                     val minT = 0.20f
                     val maxT = 10.00f
@@ -918,8 +857,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     Slider(
                         value = motionThreshold.coerceIn(minT, maxT),
                         onValueChange = { raw ->
-                            val snapped = (kotlin.math.round((raw - minT) / step) * step + minT)
-                                .coerceIn(minT, maxT)
+                            val snapped = (round((raw - minT) / step) * step + minT).coerceIn(minT, maxT)
                             motionThreshold = snapped
                             saveMotionThreshold(snapped)
                         },
@@ -930,15 +868,8 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    //Text("Порог прохождения Уверенности: ${"%.0f".format(confPct)}%")
-
                     val confPctText = "%.0f".format(confPct)
-                    Text(
-                        text = stringResource(
-                            R.string.confidence_threshold,
-                            confPctText
-                        )
-                    )
+                    Text(text = stringResource(R.string.confidence_threshold, confPctText))
 
                     Slider(
                         value = confPct,
@@ -963,9 +894,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                             Text(stringResource(R.string.basic), maxLines = 2)
                         }
 
-                        OutlinedButton(
-                            onClick = { cardUnlocked = !cardUnlocked }
-                        ) {
+                        OutlinedButton(onClick = { cardUnlocked = !cardUnlocked }) {
                             Text(
                                 if (cardUnlocked) stringResource(R.string.lock) else stringResource(R.string.unlock),
                                 maxLines = 1
@@ -986,19 +915,9 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
             if (rawErr != null) {
                 Text(
-                    text = stringResource(
-                        R.string.nmea_error_with_details,
-                        nmeaErr.toString()
-                    ),
+                    text = stringResource(R.string.nmea_error_with_details, nmeaErr.toString()),
                     style = MaterialTheme.typography.bodySmall
                 )
-
-                /*
-                Text(
-                    text = "Ошибка: $rawErr",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                */
             } else {
                 val p = rawPos
                 if (p == null) {
@@ -1023,18 +942,6 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                         ),
                         style = MaterialTheme.typography.bodySmall
                     )
-                    /*
-                    Text(
-                        text =
-                        "lat: ${"%.6f".format(Locale.US, p.latitude)}\n" +
-                                "lon: ${"%.6f".format(Locale.US, p.longitude)}\n" +
-                                "Спутники: ${p.sats}\n" +
-                                "Время: ${timeFmt.format(p.time)}\n" +
-                                "Точность: ${"%.1f".format(Locale.US, p.accuracy)} m\n" +
-                                "Скорость: ${"%.1f".format(Locale.US, p.speed)} km/h",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    */
                 }
             }
 
@@ -1048,17 +955,8 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             Spacer(modifier = Modifier.height(6.dp))
 
             if (nmeaErr != null) {
-                /*
                 Text(
-                    text = "Ошибка NMEA: $nmeaErr",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                */
-                Text(
-                    text = stringResource(
-                        R.string.nmea_error_with_details,
-                        nmeaErr.toString()
-                    ),
+                    text = stringResource(R.string.nmea_error_with_details, nmeaErr.toString()),
                     style = MaterialTheme.typography.bodySmall
                 )
             } else {
@@ -1070,27 +968,13 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     val nmeaAlive = h.isNmeaAlive(now)
                     val fixAlive = h.isFixAlive(now)
 
-                    val nmeaStatus = if (nmeaAlive)
-                        stringResource(R.string.status_ok)
-                    else
-                        stringResource(R.string.status_no)
+                    val nmeaStatus = if (nmeaAlive) stringResource(R.string.status_ok) else stringResource(R.string.status_no)
+                    val fixStatus = if (fixAlive) stringResource(R.string.status_yes) else stringResource(R.string.status_no)
 
-                    val fixStatus = if (fixAlive)
-                        stringResource(R.string.status_yes)
-                    else
-                        stringResource(R.string.status_no)
-
-                    val satsText = h.sats?.toString()
-                        ?: stringResource(R.string.not_available)
-
-                    val hdopText = h.hdop?.toString()
-                        ?: stringResource(R.string.not_available)
-
-                    val qualityText = h.fixQuality?.toString()
-                        ?: stringResource(R.string.not_available)
-
-                    val rmcValidText = h.rmcValid?.toString()
-                        ?: stringResource(R.string.not_available)
+                    val satsText = h.sats?.toString() ?: stringResource(R.string.not_available)
+                    val hdopText = h.hdop?.toString() ?: stringResource(R.string.not_available)
+                    val qualityText = h.fixQuality?.toString() ?: stringResource(R.string.not_available)
+                    val rmcValidText = h.rmcValid?.toString() ?: stringResource(R.string.not_available)
 
                     Text(
                         text = stringResource(
@@ -1105,27 +989,11 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                         style = MaterialTheme.typography.bodySmall
                     )
 
-                    /*
-                    Text(
-                        text =
-                        "NMEA поток: ${if (nmeaAlive) "OK" else "нет"}\n" +
-                                "FIX: ${if (fixAlive) "есть" else "нет"}\n" +
-                                "Спутники(GGA): ${h.sats ?: "NA"}\n" +
-                                "HDOP: ${h.hdop ?: "NA"}\n" +
-                                "Качество: ${h.fixQuality ?: "NA"}\n" +
-                                "RMC valid: ${h.rmcValid ?: "NA"}\n",
-                        style = MaterialTheme.typography.bodySmall
-                    )*/
-
                     if (!nmeaSentence.isNullOrBlank()) {
-                        val lastSentence = nmeaSentence
-                            ?: stringResource(R.string.not_available)
+                        val lastSentence = nmeaSentence ?: stringResource(R.string.not_available)
 
                         Text(
-                            text = stringResource(
-                                R.string.last_nmea_sentence,
-                                lastSentence
-                            ),
+                            text = stringResource(R.string.last_nmea_sentence, lastSentence),
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
@@ -1134,33 +1002,18 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                                 .heightIn(min = 40.dp)
                         )
 
-                        /*
-                        Text(
-                            text = "Последнее: $nmeaSentence",
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 2,                       // сколько строк ты готов показывать
-                            overflow = TextOverflow.Ellipsis,   // обрезка
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 40.dp)          // зарезервировать место (2 строки ~ 32-40dp)
-                        )
-                        */
                         Spacer(Modifier.height(6.dp))
                     } else {
-                        // чтобы высота была такой же даже когда пусто
                         Spacer(Modifier.height(40.dp))
                         Spacer(Modifier.height(6.dp))
                     }
-
-
                 }
             }
-
         }
     }
 
     /**
-     * Помощник: после выдачи FINE решаем, что делать с BACKGROUND.
+     * Оставил, если где-то ещё используется. Сейчас flow этим не пользуется.
      */
     private fun ensureBackgroundLocation(
         context: Context,
@@ -1168,7 +1021,6 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         onBackgroundNeedRequest: () -> Unit
     ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            // до Android 10 фонового разрешения нет — считаем, что всё ок
             onBackgroundGranted()
             return
         }
@@ -1178,10 +1030,6 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             Manifest.permission.ACCESS_BACKGROUND_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-        if (granted) {
-            onBackgroundGranted()
-        } else {
-            onBackgroundNeedRequest()
-        }
+        if (granted) onBackgroundGranted() else onBackgroundNeedRequest()
     }
 }

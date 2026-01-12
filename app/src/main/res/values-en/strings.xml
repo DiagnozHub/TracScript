@@ -185,6 +185,16 @@
     <string name="server_port_placeholder">Port, for example 20332</string>
     <string name="server_host_placeholder">Server IP address or domain name</string>
 
+    <string name="battery_settings_not_found">Battery settings screen not available</string>
+    <string name="battery_settings_open_failed">Failed to open battery settings: %1$s</string>
+    <string name="turned_off">Turned off</string>
+    <string name="bg_location_required">Background location access is required</string>
+
+    <string name="server_required">Please enter server</string>
+    <string name="port_required">Please enter port</string>
+    <string name="imei_required">Please enter IMEI</string>
+
+    <string name="service_stopped_due_to_protocol_change">Protocol changed - service stopped</string>
 
 
 </resources>
