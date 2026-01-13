@@ -194,6 +194,7 @@
     <string name="imei_required">Заполните IMEI</string>
 
     <string name="service_stopped_due_to_protocol_change">Протокол изменён - сервис остановлен</string>
+    <string name="auto_scroll">Автопрокрутка</string>
 
 
 </resources>

@@ -4,6 +4,9 @@ import android.content.Context
 import android.os.Environment
 import android.util.Log
 import java.io.File
+import java.io.RandomAccessFile
+import kotlin.math.max
+
 
 class FileHelper(
     private val context: Context,
@@ -182,4 +185,39 @@ class FileHelper(
             setDebug("Error JSON saving")
         }
     }
+
+    fun readTailTextFromDocuments(fileName: String, maxBytes: Int = 256 * 1024): String? {
+        return try {
+            val dir = getTracScriptDir() ?: return null
+            val file = File(dir, fileName)
+            if (!file.exists()) return null
+
+            RandomAccessFile(file, "r").use { raf ->
+                val len = raf.length()
+                if (len <= 0L) return ""
+
+                val start = max(0L, len - maxBytes.toLong())
+                raf.seek(start)
+
+                val bytes = ByteArray((len - start).toInt())
+                raf.readFully(bytes)
+
+                var text = bytes.toString(Charsets.UTF_8)
+
+                // Если не с начала файла — отрезаем “обрубок” первой строки
+                if (start > 0) {
+                    val idx = text.indexOf('\n')
+                    if (idx >= 0 && idx + 1 < text.length) {
+                        text = text.substring(idx + 1)
+                    }
+                }
+
+                text
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "readTailTextFromDocuments: read error '$fileName'", e)
+            null
+        }
+    }
+
 }

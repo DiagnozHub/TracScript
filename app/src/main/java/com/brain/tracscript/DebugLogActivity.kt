@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -24,6 +25,14 @@ import com.brain.tracscript.ui.theme.TracScriptTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.isActive
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 class DebugLogActivity : ComponentActivity() {
 
@@ -48,6 +57,11 @@ class DebugLogActivity : ComponentActivity() {
     }
 }
 
+private suspend fun loadLogTail(fileHelper: FileHelper, file: String): String =
+    withContext(Dispatchers.IO) {
+        fileHelper.readTailTextFromDocuments(file, 256 * 1024) ?: ""
+    }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DebugLogScreen(
@@ -60,11 +74,31 @@ private fun DebugLogScreen(
     var selectedFile by remember { mutableStateOf<String?>(null) }
     var expanded by remember { mutableStateOf(false) }
 
+    var firstOpenScrollDone by remember { mutableStateOf(false) }
+
+    // галочка автопрокрутки (по умолчанию включена — удобнее для live tail)
+    var autoScrollEnabled by remember { mutableStateOf(true) }
+
+    // триггер автоскролла (инкремент = запрос на скролл)
+    var scrollRequestId by remember { mutableIntStateOf(0) }
+
     val scrollState = rememberScrollState()
 
-    // "Залипание" к низу: true пока пользователь сам не уедет вверх
-    var stickToBottomWanted by remember { mutableStateOf(true) }
-    var pendingScrollToBottom by remember { mutableStateOf(false) }
+    // ---- ТЕКСТ ЛОГА ----
+    val displayText =
+        if (logText.isNotEmpty()) logText else stringResource(R.string.debug_log_empty)
+
+    val dateColor = MaterialTheme.colorScheme.tertiary
+
+    val colored by produceState<AnnotatedString>(
+        initialValue = AnnotatedString(""),
+        key1 = displayText,
+        key2 = dateColor
+    ) {
+        value = withContext(Dispatchers.Default) {
+            buildColoredLog(displayText, dateColor)
+        }
+    }
 
     // 1) первичная загрузка списка файлов
     LaunchedEffect(Unit) {
@@ -72,56 +106,63 @@ private fun DebugLogScreen(
         selectedFile = logFiles.firstOrNull()
     }
 
-    // 2) отслеживаем, находится ли пользователь внизу.
-    // Если пользователь уехал вверх — отключаем stickToBottomWanted.
-    LaunchedEffect(scrollState) {
-        snapshotFlow {
-            val thresholdPx = 24
-            scrollState.value >= (scrollState.maxValue - thresholdPx).coerceAtLeast(0)
-        }
-            .distinctUntilChanged()
-            .collect { atBottom ->
-                stickToBottomWanted = atBottom
-            }
-    }
-
-    // 3) online-обновление выбранного файла
+    // 2) online-обновление выбранного файла
     LaunchedEffect(selectedFile) {
         val file = selectedFile ?: run {
             logText = ""
             return@LaunchedEffect
         }
 
-        // при открытии файла всегда "залипаем" к низу
-        stickToBottomWanted = true
+        // при открытии файла ВСЕГДА скроллим в конец (твой пункт №1)
+        scrollRequestId++
 
         // первичная загрузка
-        logText = fileHelper.readTextFromDocuments(file) ?: ""
-        pendingScrollToBottom = true
+        logText = loadLogTail(fileHelper, file)
 
         while (isActive) {
-            delay(500L)
+            val cur = loadLogTail(fileHelper, file)
 
-            val cur = fileHelper.readTextFromDocuments(file) ?: ""
             if (cur != logText) {
-                val shouldScroll = stickToBottomWanted
                 logText = cur
-                if (shouldScroll) {
-                    pendingScrollToBottom = true
+
+                // при поступлении новых строк — скроллим только если галка включена (пункт №2)
+                if (autoScrollEnabled) {
+                    scrollRequestId++
                 }
             }
+
+            delay(1500L)
         }
     }
 
-    // 4) Реальный скролл вниз после перерасчёта layout (maxValue станет актуальным)
-    LaunchedEffect(pendingScrollToBottom, logText) {
-        if (!pendingScrollToBottom) return@LaunchedEffect
+    // 3) Реальный скролл вниз после перерасчёта layout (maxValue станет актуальным)
+    // ВАЖНО: скроллим по (scrollRequestId, colored), т.к. на экран выводится colored.
+    LaunchedEffect(scrollRequestId, colored) {
 
-        // дождаться применения нового текста и пересчёта maxValue
-        withFrameNanos { }
+        val allowScroll =
+            !firstOpenScrollDone || autoScrollEnabled
+
+        if (!allowScroll) return@LaunchedEffect
+
+        // Ждём пока layout посчитает maxValue
+        if (scrollState.maxValue == 0) {
+            snapshotFlow { scrollState.maxValue }
+                .filter { it > 0 }
+                .first()
+        }
+
+        // Дожидаемся стабилизации
+        var last = -1
+        repeat(5) {
+            val cur = scrollState.maxValue
+            if (cur == last && cur > 0) return@repeat
+            last = cur
+            withFrameNanos { }
+        }
+
         scrollState.scrollTo(scrollState.maxValue)
 
-        pendingScrollToBottom = false
+        firstOpenScrollDone = true
     }
 
     Column(
@@ -164,19 +205,11 @@ private fun DebugLogScreen(
 
         Spacer(Modifier.height(8.dp))
 
-        // ---- КНОПКИ ----
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-
-            Button(
-                enabled = selectedFile != null,
-                onClick = {
-                    selectedFile?.let { f ->
-                        logText = fileHelper.readTextFromDocuments(f) ?: ""
-                        if (stickToBottomWanted) pendingScrollToBottom = true
-                    }
-                }
-            ) { Text(stringResource(R.string.update)) }
-
+        // ---- КНОПКИ + ГАЛОЧКА ----
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Button(
                 enabled = selectedFile != null,
                 onClick = {
@@ -184,7 +217,6 @@ private fun DebugLogScreen(
                         fileHelper.deleteFileFromDocuments(f)
                         logFiles = fileHelper.listLogFiles()
                         selectedFile = logFiles.firstOrNull()
-                        // logText обновится через LaunchedEffect(selectedFile)
                     }
                 }
             ) { Text(stringResource(R.string.clear)) }
@@ -192,18 +224,25 @@ private fun DebugLogScreen(
             Button(onClick = onClose) {
                 Text(stringResource(R.string.close))
             }
+
+            Spacer(Modifier.weight(1f))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = autoScrollEnabled,
+                    onCheckedChange = {
+                        autoScrollEnabled = it
+                        if (it) scrollRequestId++
+                    }
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.auto_scroll))
+            }
         }
 
         // ---- ТЕКСТ ЛОГА ----
-        val displayText =
-            if (logText.isNotEmpty()) logText else stringResource(R.string.debug_log_empty)
-
-        val dateColor = MaterialTheme.colorScheme.tertiary
-        val colored = remember(displayText, dateColor) {
-            buildColoredLog(displayText, dateColor)
-        }
-
-        // Копирование текста
         SelectionContainer(
             modifier = Modifier
                 .padding(top = 12.dp)
@@ -221,6 +260,7 @@ private fun DebugLogScreen(
         }
     }
 }
+
 
 /**
  * Подсвечивает ведущую дату вида: [yyyy-MM-dd HH:mm:ss.SSS]
@@ -252,8 +292,9 @@ private fun buildColoredLog(text: String, dateColor: Color): AnnotatedString {
         var inErrorBlock = false
         var inWarnBlock = false
 
-        val lines = text.split('\n')
-        for (line in lines) {
+        //val lines = text.split('\n')
+        //for (line in lines) {
+        for (line in text.lineSequence()) {
 
             // Новый лог-энтри: сбрасываем/устанавливаем блоки по уровню
             if (isNewLogEntry(line)) {
@@ -300,6 +341,8 @@ private fun buildColoredLog(text: String, dateColor: Color): AnnotatedString {
         }
     }
 }
+
+
 
 
 

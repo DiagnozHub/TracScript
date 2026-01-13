@@ -195,6 +195,7 @@
     <string name="imei_required">Please enter IMEI</string>
 
     <string name="service_stopped_due_to_protocol_change">Protocol changed - service stopped</string>
+    <string name="auto_scroll">Auto-scroll</string>
 
 
 </resources>
