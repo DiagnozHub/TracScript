@@ -253,18 +253,18 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         }
 
         fun resetToDefaults() {
-            password = DEFAULT_PASSWORD
-            intervalSecText = DEFAULT_GPS_INTERVAL_SEC.toString()
-            minDistanceText = DEFAULT_GPS_MIN_DISTANCE_M.toString().removeSuffix(".0")
-            minAngleText = DEFAULT_GPS_MIN_ANGLE_DEG.toString().removeSuffix(".0")
+            //password = DEFAULT_PASSWORD
+            //intervalSecText = DEFAULT_GPS_INTERVAL_SEC.toString()
+            //minDistanceText = DEFAULT_GPS_MIN_DISTANCE_M.toString().removeSuffix(".0")
+            //minAngleText = DEFAULT_GPS_MIN_ANGLE_DEG.toString().removeSuffix(".0")
             motionThreshold = DEFAULT_MOTION_THRESHOLD
             confPct = DEFAULT_ACCEL_CONFIDENCE_MOVING * 100f
 
             prefs.edit()
-                .putString(KEY_PASSWORD, DEFAULT_PASSWORD)
-                .putInt(KEY_GPS_INTERVAL_SEC, DEFAULT_GPS_INTERVAL_SEC)
-                .putFloat(KEY_GPS_MIN_DISTANCE_M, DEFAULT_GPS_MIN_DISTANCE_M)
-                .putFloat(KEY_GPS_MIN_ANGLE_DEG, DEFAULT_GPS_MIN_ANGLE_DEG)
+                //.putString(KEY_PASSWORD, DEFAULT_PASSWORD)
+                //.putInt(KEY_GPS_INTERVAL_SEC, DEFAULT_GPS_INTERVAL_SEC)
+                //.putFloat(KEY_GPS_MIN_DISTANCE_M, DEFAULT_GPS_MIN_DISTANCE_M)
+                //.putFloat(KEY_GPS_MIN_ANGLE_DEG, DEFAULT_GPS_MIN_ANGLE_DEG)
                 .putFloat(KEY_MOTION_THRESHOLD, DEFAULT_MOTION_THRESHOLD)
                 .putFloat(KEY_ACCEL_CONFIDENCE_MOVING, DEFAULT_ACCEL_CONFIDENCE_MOVING)
                 .apply()
@@ -575,6 +575,10 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             ).show()
         }
 
+        // Сервис “считаем запущенным”, если плагин включен.
+        // На время enable-flow тоже блокируем, чтобы не менять конфиг в процессе выдачи прав.
+        val configLocked = enabled || pendingEnable
+        val canEdit = !configLocked
 
 
         // ============================================================
@@ -631,6 +635,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
+                        enabled = canEdit,
                         onClick = {
                             if (protocol != GpsProtocolType.OSMAND) {
                                 stopGpsServiceIfRunning()
@@ -643,6 +648,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                         else null
                     ) { Text("Traccar") }
                     OutlinedButton(
+                        enabled = canEdit,
                         onClick = {
                             if (protocol != GpsProtocolType.WIALON) {
                                 stopGpsServiceIfRunning()
@@ -660,6 +666,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedTextField(
+                enabled = canEdit,
                 value = host,
                 onValueChange = { new ->
                     host = new
@@ -674,6 +681,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedTextField(
+                enabled = canEdit,
                 value = portText,
                 onValueChange = { new ->
                     val filtered = new.filter { it.isDigit() }
@@ -699,6 +707,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             val showImeiError = imeiTouched && !imeiValidNow
 
             OutlinedTextField(
+                enabled = canEdit,
                 value = imeiInput,
                 onValueChange = { new ->
                     imeiTouched = true
@@ -730,6 +739,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
             if (protocol == GpsProtocolType.WIALON) {
                 OutlinedTextField(
+                    enabled = canEdit,
                     value = password,
                     onValueChange = { new ->
                         password = new
@@ -751,6 +761,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedTextField(
+                enabled = canEdit,
                 value = intervalSecText,
                 onValueChange = { new ->
                     val filtered = new.filter { it.isDigit() }
@@ -767,6 +778,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedTextField(
+                enabled = canEdit,
                 value = minDistanceText,
                 onValueChange = { new ->
                     val filtered = new.filter { it.isDigit() || it == '.' }
@@ -783,6 +795,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedTextField(
+                enabled = canEdit,
                 value = minAngleText,
                 onValueChange = { new ->
                     val filtered = new.filter { it.isDigit() || it == '.' }
@@ -863,7 +876,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                         },
                         valueRange = minT..maxT,
                         steps = steps,
-                        enabled = cardUnlocked
+                        enabled = cardUnlocked && canEdit
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -879,7 +892,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                         },
                         valueRange = 1f..100f,
                         steps = 99,
-                        enabled = cardUnlocked
+                        enabled = cardUnlocked && canEdit
                     )
 
                     Row(
@@ -889,12 +902,12 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                         OutlinedButton(
                             onClick = { resetToDefaults() },
                             modifier = Modifier.weight(1f),
-                            enabled = cardUnlocked
+                            enabled = cardUnlocked && canEdit
                         ) {
                             Text(stringResource(R.string.basic), maxLines = 2)
                         }
 
-                        OutlinedButton(onClick = { cardUnlocked = !cardUnlocked }) {
+                        OutlinedButton(onClick = { cardUnlocked = !cardUnlocked }, enabled = canEdit) {
                             Text(
                                 if (cardUnlocked) stringResource(R.string.lock) else stringResource(R.string.unlock),
                                 maxLines = 1
