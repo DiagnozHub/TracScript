@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 
 // Читаем конфиг плагина из SharedPreferences
 fun loadGpsConfig(appContext: Context): GpsConfig {
-    val prefs = appContext.getSharedPreferences("plugin_gps_wialon", Context.MODE_PRIVATE)
+    val prefs = appContext.getSharedPreferences(GPSWialonSettings.PREFS, Context.MODE_PRIVATE)
 
     val enabled = prefs.getBoolean(GPSWialonSettings.KEY_ENABLED, false)
     val host = prefs.getString(GPSWialonSettings.KEY_HOST, "") ?: ""
@@ -55,7 +55,7 @@ class GpsSendBlockedException(
     cause: Throwable? = null
 ) : RuntimeException(message, cause)
 
-class GpsPlugin : Plugin {
+class GpsPlugin (private val appCtx: Context) : Plugin {
 
     override val id: String = "gps_wialon"
     override val displayName: String = "GPS + Wialon plugin"
@@ -68,9 +68,11 @@ class GpsPlugin : Plugin {
     private val pluginScope = CoroutineScope(pluginJob + Dispatchers.IO)
 
     override fun isEnabled(): Boolean {
-        val ctx = context ?: return false
-        val cfg = loadGpsConfig(ctx.appContext)
-        return cfg.enabled
+        //val ctx = context ?: return false
+        //val cfg = loadGpsConfig(ctx.appContext)
+        //return cfg.enabled
+
+        return loadGpsConfig(appCtx).enabled
     }
 
     override fun onAttach(context: PluginContext) {
@@ -102,8 +104,8 @@ class GpsPlugin : Plugin {
     }
 
     private fun applyEnabledFromPrefs(context: PluginContext) {
-        val prefs = context.appContext.getSharedPreferences("plugin_gps_wialon", Context.MODE_PRIVATE)
-        val enabled = prefs.getBoolean("enabled", false)
+        val prefs = context.appContext.getSharedPreferences( GPSWialonSettings.PREFS, Context.MODE_PRIVATE)
+        val enabled = prefs.getBoolean(GPSWialonSettings.KEY_ENABLED, false)
 
         context.log(id, "applyEnabledFromPrefs: enabled=$enabled")
 
@@ -178,35 +180,5 @@ class GpsPlugin : Plugin {
                 }
             }
         }
-
-
-
-        /*
-        if (event.type != "wialon_table_json") return
-
-        val ctx = context ?: return
-        val repo = telemetryRepo ?: return
-
-        if (!isEnabled()) {
-            ctx.log(id, "gps_wialon выключен — событие wialon_table_json игнорируем")
-            return
-        }
-
-        val json = event.payload["json"] as? String ?: return
-        val fileName = event.payload["fileName"] as? String
-
-        ctx.log(
-            id,
-            "Получено событие ядра для Wialon: ${fileName ?: "<?>"} (len=${json.length}) ts=${event.timestamp}"
-        )
-
-        pluginScope.launch {
-            repo.saveCoreEvent(
-                eventTimeMillis = event.timestamp,
-                payloadJson = json,
-                source = fileName
-            )
-        }
-        */
     }
 }

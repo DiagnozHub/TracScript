@@ -15,8 +15,6 @@ class PluginRuntime(appContext: Context) {
     private val job = SupervisorJob()
     private val scope = CoroutineScope(job + Dispatchers.Default)
 
-    //private val dataBus: DataBus = SimpleDataBus()
-
     private val _dataBus: DataBus = SimpleDataBus()
     val dataBus: DataBus get() = _dataBus
 
@@ -33,8 +31,8 @@ class PluginRuntime(appContext: Context) {
     }
 
     private val plugins: List<Plugin> = listOf(
-        GpsPlugin(),
-        ScenarioPlugin()
+        GpsPlugin(appCtx),
+        ScenarioPlugin(appCtx)
         // позже добавим новый плагин сценариев
     )
 
@@ -49,6 +47,7 @@ class PluginRuntime(appContext: Context) {
         }
     }
 
+    /*
     fun detachAll() {
         // detach в обратном порядке — меньше сюрпризов
         for (p in plugins.asReversed()) {
@@ -66,5 +65,6 @@ class PluginRuntime(appContext: Context) {
             }
         }
     }
+     */
 
 }

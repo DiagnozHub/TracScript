@@ -15,38 +15,15 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent?.action != Intent.ACTION_BOOT_COMPLETED) return
 
-        Log.d(TAG, "BootReceiver: ACTION_BOOT_COMPLETED получен")
+        //val autoStart = SettingsStorage.isAutoStartEnabled(context)
+        //if (!autoStart) return
 
-        // Проверяем, разрешён ли автозапуск в настройках
-        val autoStart = SettingsStorage.isAutoStartEnabled(context)
-        val periodicEnabled = SettingsStorage.isPeriodicEnabled(context)
-        Log.d(TAG, "BootReceiver: autoStart=$autoStart, periodicEnabled=$periodicEnabled")
+        BootInitService.start(context)
 
-        when {
-            // 1) Если включён периодический запуск — он главный
-            periodicEnabled -> {
-                val sec = SettingsStorage
-                    .getPeriodicIntervalSec(context)
-                    .coerceAtLeast(1)
-                val intervalMs = sec * 1000L
-                val raw = "start_periodic:$intervalMs"
-
-                CommandStorage.saveRaw(context, raw)
-                Log.d(TAG, "BootReceiver: записал команду '$raw' в CommandStorage")
-            }
-
-            /*
-            // 2) Если периодический выключен, но включён автостарт — один раз запустим сценарий
-            autoStart -> {
-                CommandStorage.saveRaw(context, "open_app")
-                Log.d(TAG, "BootReceiver: записал команду 'open_app' в CommandStorage")
-            }
-            */
-
-            // 3) Всё выключено — ничего не делаем
-            else -> {
-                Log.d(TAG, "BootReceiver: автозапуск и периодический запуск выключены, ничего не делаю")
-            }
-        }
+        // если надо - оставляем твою periodic-команду
+        //if (SettingsStorage.isPeriodicEnabled(context)) {
+        //    val sec = SettingsStorage.getPeriodicIntervalSec(context).coerceAtLeast(1)
+        //    CommandStorage.saveRaw(context, "start_periodic:${sec * 1000L}")
+        //}
     }
 }

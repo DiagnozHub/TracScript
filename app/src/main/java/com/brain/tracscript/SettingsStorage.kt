@@ -26,18 +26,20 @@ object SettingsStorage {
 
     // --- Периодический запуск ---
 
-    fun isPeriodicEnabled(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return prefs.getBoolean(KEY_PERIODIC_ENABLED, false)
-    }
+    //fun isPeriodicEnabled(context: Context): Boolean {
+    //    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    //    return prefs.getBoolean(KEY_PERIODIC_ENABLED, false)
+    //}
 
     /**
      * Интервал в секундах, по умолчанию 600 (10 минут).
      */
-    fun getPeriodicIntervalSec(context: Context): Int {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return prefs.getInt(KEY_PERIODIC_INTERVAL_SEC, 600)
-    }
+
+    /*
+    //fun getPeriodicIntervalSec(context: Context): Int {
+    //    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    //    return prefs.getInt(KEY_PERIODIC_INTERVAL_SEC, 600)
+    //}
 
     fun setPeriodicEnabled(context: Context, enabled: Boolean) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -52,6 +54,7 @@ object SettingsStorage {
             .putInt(KEY_PERIODIC_INTERVAL_SEC, seconds)
             .apply()
     }
+    */
 
     fun isPreventScreenOffEnabled(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

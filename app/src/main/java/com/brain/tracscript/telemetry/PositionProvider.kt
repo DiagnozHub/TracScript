@@ -27,12 +27,6 @@ abstract class PositionProvider(
         fun onPositionError(error: Throwable)
     }
 
-    // Настройки плагина GPS/Wialon (те же, что в GpsWialonPluginSettingsDefinition)
-    /*
-    protected val pluginPrefs: SharedPreferences =
-        context.getSharedPreferences("plugin_gps_wialon", Context.MODE_PRIVATE)
-    */
-
     private var lastLocation: Location? = null
 
     abstract fun startUpdates()

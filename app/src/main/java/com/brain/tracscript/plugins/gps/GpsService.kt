@@ -170,7 +170,7 @@ class GpsService : Service(), CoroutineScope {
         ensureWakeLock();
 
         val prefs =
-            applicationContext.getSharedPreferences("plugin_gps_wialon", Context.MODE_PRIVATE)
+            applicationContext.getSharedPreferences(GpsPluginSettingsDefinition.PREFS, Context.MODE_PRIVATE)
         val thr = prefs.getFloat(
             GpsPluginSettingsDefinition.KEY_MOTION_THRESHOLD,
             GpsPluginSettingsDefinition.DEFAULT_MOTION_THRESHOLD
@@ -186,7 +186,7 @@ class GpsService : Service(), CoroutineScope {
         motionCfgJob?.cancel()
         motionCfgJob = launch {
             val prefs =
-                applicationContext.getSharedPreferences("plugin_gps_wialon", Context.MODE_PRIVATE)
+                applicationContext.getSharedPreferences(GpsPluginSettingsDefinition.PREFS, Context.MODE_PRIVATE)
 
             var lastThr = Float.NaN
             var lastConf = Float.NaN

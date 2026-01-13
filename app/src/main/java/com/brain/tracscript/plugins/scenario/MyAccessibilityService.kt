@@ -11,7 +11,6 @@ import android.content.SharedPreferences
 import com.brain.tracscript.FileHelper
 import com.brain.tracscript.R
 import com.brain.tracscript.ScreenOnController
-import com.brain.tracscript.SettingsStorage
 import com.brain.tracscript.core.TracScriptApp
 import com.brain.tracscript.core.DataBus
 import com.brain.tracscript.core.DataBusEvent
@@ -93,28 +92,28 @@ class MyAccessibilityService : AccessibilityService() {
     private fun bus(): DataBus =
         (application as TracScriptApp).pluginRuntime.dataBus
 
-    private val scenarioPrefs by lazy {
-        applicationContext.getSharedPreferences("plugin_scenario", Context.MODE_PRIVATE)
-    }
+    private val prefs by lazy { ScenarioPrefs.prefs(applicationContext) }
 
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "enabled") syncEngineState()
+        if (key == ScenarioPrefs.KEY_ENABLED) {
+            syncEngineState()
+        }
     }
 
-    private fun registerScenarioPrefListener() {
-        scenarioPrefs.registerOnSharedPreferenceChangeListener(prefListener)
+    private fun registerPrefListener() {
+        prefs.registerOnSharedPreferenceChangeListener(prefListener)
     }
 
-    private fun unregisterScenarioPrefListener() {
-        scenarioPrefs.unregisterOnSharedPreferenceChangeListener(prefListener)
+    private fun unregisterPrefListener() {
+        prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
     }
+
 
     private fun syncEngineState() {
-        val shouldRun = scenarioPrefs.getBoolean("enabled", false)
+        val shouldRun = ScenarioPrefs.isEnabled(applicationContext)
         if (shouldRun && !engineRunning) startEngine()
         if (!shouldRun && engineRunning) stopEngine()
     }
-
 
     private fun startEngine() {
         if (engineRunning) return
@@ -166,14 +165,14 @@ class MyAccessibilityService : AccessibilityService() {
         )
 
         // --- восстановление periodic ---
-        if (SettingsStorage.isPeriodicEnabled(this)) {
-            val sec = SettingsStorage.getPeriodicIntervalSec(this).coerceAtLeast(1)
+        if (ScenarioPrefs.isPeriodicEnabled(applicationContext)) {
+            val sec = ScenarioPrefs.getPeriodicIntervalSec(applicationContext).coerceAtLeast(1)
             scenarioManager.startPeriodic(sec * 1000L)
         }
 
         busSub = bus().subscribe { event ->
             if (!engineRunning) return@subscribe
-            if (!isScenarioPluginEnabled(applicationContext)) return@subscribe
+            if (!ScenarioPrefs.isEnabled(applicationContext)) return@subscribe
             if (event.type != "scenario_cmd") return@subscribe
 
             val cmd = event.payload["cmd"] as? String ?: return@subscribe
@@ -637,14 +636,15 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
 
-        registerScenarioPrefListener()
+        registerPrefListener()
+
         syncEngineState()
 
         logScenario?.i(TAG, "AccessibilityService connected")
     }
 
     override fun onDestroy() {
-        unregisterScenarioPrefListener()
+        unregisterPrefListener()
         stopEngine()
         serviceJob.cancel()
         super.onDestroy()

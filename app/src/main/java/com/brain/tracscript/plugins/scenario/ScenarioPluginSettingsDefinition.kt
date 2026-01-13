@@ -1,6 +1,5 @@
 package com.brain.tracscript.plugins.scenario
 
-import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -19,54 +18,38 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.brain.tracscript.R
-import com.brain.tracscript.SettingsStorage
 import com.brain.tracscript.core.PluginSettingsDefinition
 import com.brain.tracscript.util.isMyAccessibilityServiceEnabled
 
 object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
 
     override val id: String = "scenario"
-    //override val displayName: String = "Сценарии"
 
     @Composable
-    override fun displayName(): String =
-        stringResource(R.string.scenarios)
+    override fun displayName(): String = stringResource(R.string.scenarios)
 
     private const val KEY_PIN_TO_MAIN = "pin_to_main"
-    private const val KEY_ENABLED = "enabled"
-    private const val PREFS = "plugin_scenario"
 
     @Composable
     override fun Content() {
         val context = LocalContext.current
-        val prefs = remember { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
-
-        var periodicEnabled by remember {
-            mutableStateOf(SettingsStorage.isPeriodicEnabled(context))
-        }
-
-        var periodicSecondsText by remember {
-            mutableStateOf(
-                SettingsStorage.getPeriodicIntervalSec(context).toString()
-            )
-        }
-
+        val prefs = remember { ScenarioPrefs.prefs(context) }
 
         var pinToMain by remember { mutableStateOf(prefs.getBoolean(KEY_PIN_TO_MAIN, false)) }
-
-
         fun savePinToMain(v: Boolean) {
             prefs.edit().putBoolean(KEY_PIN_TO_MAIN, v).apply()
         }
 
-        var enabled by remember { mutableStateOf(prefs.getBoolean(KEY_ENABLED, false)) }
-        fun saveEnabled(v: Boolean) {
-            prefs.edit().putBoolean(KEY_ENABLED, v).apply()
+        var enabled by remember { mutableStateOf(ScenarioPrefs.isEnabled(context)) }
+        fun saveEnabled(v: Boolean) = ScenarioPrefs.setEnabled(context, v)
+
+        var periodicEnabled by remember { mutableStateOf(ScenarioPrefs.isPeriodicEnabled(context)) }
+        var periodicSecondsText by remember {
+            mutableStateOf(ScenarioPrefs.getPeriodicIntervalSec(context).toString())
         }
 
         var a11yOn by remember { mutableStateOf(isMyAccessibilityServiceEnabled(context)) }
 
-        // Лаунчер: открыли системные настройки, вернулись -> проверили a11y, выставили enabled корректно
         val a11ySettingsLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) {
@@ -85,7 +68,7 @@ object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
         LaunchedEffect(Unit) {
             a11yOn = isMyAccessibilityServiceEnabled(context)
 
-            // если служба выключена — плагин принудительно выключаем (чтобы не было "включен" при OFF a11y)
+            // если служба выключена — плагин принудительно выключаем
             if (!a11yOn && enabled) {
                 enabled = false
                 saveEnabled(false)
@@ -100,25 +83,19 @@ object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
                     checked = enabled,
                     onCheckedChange = { v ->
                         if (!v) {
-                            // выключаем всегда сразу
                             enabled = false
                             saveEnabled(false)
                             return@Switch
                         }
 
-                        // включение: если служба уже включена — включаем плагин сразу
                         a11yOn = isMyAccessibilityServiceEnabled(context)
                         if (a11yOn) {
                             enabled = true
                             saveEnabled(true)
                         } else {
-                            // служба выключена — НЕ включаем плагин, отправляем пользователя в настройки
                             enabled = false
                             saveEnabled(false)
-
-                            a11ySettingsLauncher.launch(
-                                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                            )
+                            a11ySettingsLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         }
                     }
                 )
@@ -147,20 +124,14 @@ object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
                     checked = periodicEnabled,
                     onCheckedChange = { checked ->
                         periodicEnabled = checked
-                        SettingsStorage.setPeriodicEnabled(context, checked)
+                        ScenarioPrefs.setPeriodicEnabled(context, checked)
 
                         val sec = periodicSecondsText.toLongOrNull() ?: 0L
                         if (checked && sec > 0L) {
-                            SettingsStorage.setPeriodicIntervalSec(context, sec.toInt())
-                            CommandSender.send(
-                                context,
-                                ControlCommand.StartPeriodic(sec * 1000L)
-                            )
+                            ScenarioPrefs.setPeriodicIntervalSec(context, sec.toInt())
+                            CommandSender.send(context, ControlCommand.StartPeriodic(sec * 1000L))
                         } else {
-                            CommandSender.send(
-                                context,
-                                ControlCommand.StopPeriodic
-                            )
+                            CommandSender.send(context, ControlCommand.StopPeriodic)
                         }
                     }
                 )
@@ -181,25 +152,18 @@ object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
 
                         val sec = filtered.toLongOrNull()
                         if (sec != null && sec > 0L) {
-                            SettingsStorage.setPeriodicIntervalSec(context, sec.toInt())
-
+                            ScenarioPrefs.setPeriodicIntervalSec(context, sec.toInt())
                             if (periodicEnabled) {
-                                CommandSender.send(
-                                    context,
-                                    ControlCommand.StartPeriodic(sec * 1000L)
-                                )
+                                CommandSender.send(context, ControlCommand.StartPeriodic(sec * 1000L))
                             }
                         }
                     },
                     modifier = Modifier.width(72.dp),
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number
-                    ),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     label = { Text(stringResource(R.string.seconds)) }
                 )
             }
-
 
             Spacer(Modifier.height(16.dp))
 
@@ -226,7 +190,6 @@ object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
 
             ElevatedButton(
                 onClick = {
-                    // запуск возможен только если служба включена
                     if (!isMyAccessibilityServiceEnabled(context)) {
                         a11ySettingsLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     } else {

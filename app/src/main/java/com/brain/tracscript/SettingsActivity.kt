@@ -76,16 +76,6 @@ private fun SettingsScreen(
         mutableStateOf(SettingsStorage.isAutoStartEnabled(context))
     }
 
-    var periodicEnabled by remember {
-        mutableStateOf(SettingsStorage.isPeriodicEnabled(context))
-    }
-
-    var periodicSecondsText by remember {
-        mutableStateOf(
-            SettingsStorage.getPeriodicIntervalSec(context).toString()
-        )
-    }
-
     var preventScreenOffEnabled by remember {
         mutableStateOf(SettingsStorage.isPreventScreenOffEnabled(context))
     }

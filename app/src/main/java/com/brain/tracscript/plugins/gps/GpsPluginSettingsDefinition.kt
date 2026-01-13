@@ -64,7 +64,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
     @Composable
     override fun displayName(): String = "GPS"
 
-    private const val PREFS = "plugin_gps_wialon"
+    const val PREFS = "plugin_gps_wialon"
     const val KEY_ENABLED = "enabled"
     const val KEY_HOST = "host"
     const val KEY_PORT = "port"
@@ -86,8 +86,8 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
     const val DEFAULT_MOTION_THRESHOLD = 0.80f
     const val DEFAULT_ACCEL_CONFIDENCE_MOVING = 0.10f
 
-    const val DEFAULT_ENABLED = false
-    const val DEFAULT_PASSWORD = "NA"
+    private const val DEFAULT_ENABLED = false
+    private const val DEFAULT_PASSWORD = "NA"
 
     private const val KEY_PIN_TO_MAIN = "pin_to_main"
 
@@ -282,6 +282,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             return pm.isIgnoringBatteryOptimizations(context.packageName)
         }
 
+        /*
         fun requestIgnoreBatteryOptimizationsSafe() {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
 
@@ -300,6 +301,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                 Toast.makeText(context, context.getString(R.string.battery_settings_open_failed, t.javaClass.simpleName), Toast.LENGTH_SHORT).show()
             }
         }
+        */
 
         fun notifyEnabledChanged(isEnabled: Boolean) {
             val bus = (context.applicationContext as TracScriptApp).pluginRuntime.dataBus
@@ -1023,26 +1025,5 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                 }
             }
         }
-    }
-
-    /**
-     * Оставил, если где-то ещё используется. Сейчас flow этим не пользуется.
-     */
-    private fun ensureBackgroundLocation(
-        context: Context,
-        onBackgroundGranted: () -> Unit,
-        onBackgroundNeedRequest: () -> Unit
-    ) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            onBackgroundGranted()
-            return
-        }
-
-        val granted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_BACKGROUND_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (granted) onBackgroundGranted() else onBackgroundNeedRequest()
     }
 }
