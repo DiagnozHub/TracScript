@@ -26,9 +26,11 @@ Currently implemented plugins include:
 The main idea of the Scenarios plugin is to collect required information from the smartphone and transmit it to navigation servers together with GPS coordinates.
 
 ## Images
-<img src="https://github.com/user-attachments/assets/87167e87-c022-41c0-b842-00ea80043974"
-     width="400">
-
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/87167e87-c022-41c0-b842-00ea80043974" width="250">
+  <img src="https://github.com/user-attachments/assets/2cbd6d35-3fb5-422f-88be-37e8a37a5801" width="250">
+  <img src="https://github.com/user-attachments/assets/5267de6a-fb6f-4cf8-8b75-e610db376b62" width="250">
+</p>
 
 ## Author
 Contact: diagnoz174@gmail.com
