@@ -25,7 +25,7 @@ class OsmAndProtocolSender(
         private const val TIMEOUT_MS = 15_000 // как в старом приложении
 
         // Масштаб для мелких float, чтобы Traccar UI не округлял до 0
-        private const val ACC_SCALE = 1000.0
+        private const val ACC_SCALE = 10000.0
     }
 
     override suspend fun sendGps(pos: Position, params: List<PositionParam>) {

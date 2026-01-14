@@ -67,10 +67,6 @@ class MyAccessibilityService : AccessibilityService() {
         private val serviceScope = CoroutineScope(serviceJob + Dispatchers.Main)
     }
 
-    // --- периодическая проверка команд ---
-    private val commandPollHandler = Handler(Looper.getMainLooper())
-    private var commandPollRunning = false
-
     // хэндлер на главном потоке для задержек и ожиданий
     private val waitHandler = Handler(Looper.getMainLooper())
     private var debugOverlay: DebugOverlay? = null
@@ -173,19 +169,21 @@ class MyAccessibilityService : AccessibilityService() {
         busSub = bus().subscribe { event ->
             if (!engineRunning) return@subscribe
             if (!ScenarioPrefs.isEnabled(applicationContext)) return@subscribe
-            if (event.type != "scenario_cmd") return@subscribe
+            if (event.type != ScenarioCommands.EVENT) return@subscribe
 
-            val cmd = event.payload["cmd"] as? String ?: return@subscribe
+            val cmd = event.payload[ScenarioCommands.CMD] as? String ?: return@subscribe
             when (cmd) {
-                "open_app" -> scenarioManager.startSingleRun()
-                "explore_on" -> enableExploreMode()
-                "explore_off" -> disableExploreMode()
-                else -> { /* игнор */ }
+                ScenarioCommands.OPEN_APP -> scenarioManager.startSingleRun()
+                ScenarioCommands.EXPLORE_ON -> enableExploreMode()
+                ScenarioCommands.EXPLORE_OFF -> disableExploreMode()
+
+                ScenarioCommands.START_PERIODIC -> {
+                    val intervalMs = event.payload[ScenarioCommands.INTERVAL_MS] as? Long ?: return@subscribe
+                    scenarioManager.startPeriodic(intervalMs)
+                }
+                ScenarioCommands.STOP_PERIODIC -> scenarioManager.stopPeriodic()
             }
         }
-
-        handleLastCommand()
-        startCommandPolling()
     }
 
 
@@ -194,8 +192,6 @@ class MyAccessibilityService : AccessibilityService() {
         engineRunning = false
 
         logScenario?.i(TAG, "Scenario engine STOP")
-
-        stopCommandPolling()
 
         try {
             scenarioManager.onDestroy()
@@ -219,31 +215,6 @@ class MyAccessibilityService : AccessibilityService() {
         logScenario?.i(TAG, "Scenario engine STOP")
         logScenario?.close()
         logScenario = null
-    }
-
-
-
-    private val commandPollRunnable = object : Runnable {
-        override fun run() {
-            // просто дергаем существующий метод
-            handleLastCommand()
-
-            if (commandPollRunning) {
-                // раз в 300 мс (можешь увеличить до 500–1000, если хочешь реже)
-                commandPollHandler.postDelayed(this, 300L)
-            }
-        }
-    }
-
-    private fun startCommandPolling() {
-        if (commandPollRunning) return
-        commandPollRunning = true
-        commandPollHandler.post(commandPollRunnable)
-    }
-
-    private fun stopCommandPolling() {
-        commandPollRunning = false
-        commandPollHandler.removeCallbacksAndMessages(null)
     }
 
     private fun enableExploreMode() {
@@ -719,65 +690,6 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         // ничего не нужно
-    }
-
-    // --- работа с командами через SharedPreferences (через CommandStorage) ---
-
-    private fun clearCommand() {
-        CommandStorage.clear(this)
-    }
-
-    private fun handleLastCommand() {
-        val raw = CommandStorage.loadRaw(this) ?: return
-
-        val activePkg = rootInActiveWindow?.packageName?.toString()
-
-        logScenario?.i(TAG, "handleLastCommand: raw=$raw, activePkg=$activePkg")
-
-        when {
-            raw == "open_app" -> {
-                clearCommand()
-
-                val msg = applicationContext.getString(R.string.scenario_start_by_command)
-                //logScenario?.i(TAG, msg)
-                setDebug(msg)
-
-                // Теперь запуск приложения — это шаг сценария LAUNCH_APP
-                //runScenario()
-                scenarioManager.startSingleRun()
-            }
-
-            raw == "explore_on" -> {
-                clearCommand()
-                logScenario?.i(TAG, applicationContext.getString(R.string.expl_mode_enabling))
-                enableExploreMode()
-            }
-
-            raw == "explore_off" -> {
-                clearCommand()
-                logScenario?.i(TAG, applicationContext.getString(R.string.expl_mode_disabling))
-                disableExploreMode()
-            }
-
-            raw.startsWith("start_periodic:") -> {
-                clearCommand()
-                val msStr = raw.removePrefix("start_periodic:").trim()
-                val interval = msStr.toLongOrNull() ?: (10 * 60_000L)
-                logScenario?.i(TAG, "handleLastCommand: start_periodic interval=$interval")
-                scenarioManager.startPeriodic(interval)
-            }
-
-            raw == "stop_periodic" -> {
-                clearCommand()
-                logScenario?.i(TAG, "handleLastCommand: stop_periodic")
-                scenarioManager.stopPeriodic()
-            }
-
-            else -> {
-                clearCommand()
-                logScenario?.i(TAG, applicationContext.getString(R.string.unknown_command, raw))
-            }
-        }
     }
 
     private fun runScenario(runId: Int) {

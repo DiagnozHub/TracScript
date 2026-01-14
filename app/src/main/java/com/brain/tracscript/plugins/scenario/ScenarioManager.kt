@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import com.brain.tracscript.R
 
 class ScenarioManager(
     private val logTag: String,
@@ -64,7 +65,7 @@ class ScenarioManager(
 
             val runId = nextRunId()
             Log.d(logTag, "ScenarioManager: periodic tick, runId=$runId")
-            debug("Плановый перезапуск сценария")
+            debug(appContext.getString(R.string.scenario_scheduled_restart))
 
             startScenarioCallback(runId)
 
@@ -95,7 +96,12 @@ class ScenarioManager(
         // держим CPU живым, пока периодика включена
         acquireCpuWakeLock()
 
-        debug("Периодический запуск каждые ${intervalMs / 1000} сек включен")
+        debug(
+            appContext.getString(
+                R.string.scenario_periodic_enabled,
+                intervalMs / 1000
+            )
+        )
         Log.d(logTag, "ScenarioManager: startPeriodic intervalMs=$intervalMs")
     }
 
@@ -107,7 +113,7 @@ class ScenarioManager(
         // отпускаем CPU
         releaseCpuWakeLock()
 
-        debug("Периодический запуск выключен")
+        debug(appContext.getString(R.string.scenario_periodic_disabled))
         Log.d(logTag, "ScenarioManager: stopPeriodic")
     }
 

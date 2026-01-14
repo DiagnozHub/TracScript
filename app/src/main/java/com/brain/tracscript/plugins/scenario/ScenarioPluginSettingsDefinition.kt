@@ -18,12 +18,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.brain.tracscript.R
+import com.brain.tracscript.core.DataBusEvent
 import com.brain.tracscript.core.PluginSettingsDefinition
+import com.brain.tracscript.core.TracScriptApp
 import com.brain.tracscript.util.isMyAccessibilityServiceEnabled
 
 object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
 
-    override val id: String = "scenario"
+    override val id: String = ScenarioPluginKey.ID
 
     @Composable
     override fun displayName(): String = stringResource(R.string.scenarios)
@@ -34,6 +36,19 @@ object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
     override fun Content() {
         val context = LocalContext.current
         val prefs = remember { ScenarioPrefs.prefs(context) }
+
+        fun postScenarioCmd(cmd: String, extras: Map<String, Any> = emptyMap()) {
+            val bus =
+                (context.applicationContext as TracScriptApp)
+                    .pluginRuntime.dataBus
+
+            bus.post(
+                DataBusEvent(
+                    type = ScenarioCommands.EVENT,
+                    payload = mapOf(ScenarioCommands.CMD to cmd) + extras
+                )
+            )
+        }
 
         var pinToMain by remember { mutableStateOf(prefs.getBoolean(KEY_PIN_TO_MAIN, false)) }
         fun savePinToMain(v: Boolean) {
@@ -127,11 +142,15 @@ object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
                         ScenarioPrefs.setPeriodicEnabled(context, checked)
 
                         val sec = periodicSecondsText.toLongOrNull() ?: 0L
+
                         if (checked && sec > 0L) {
                             ScenarioPrefs.setPeriodicIntervalSec(context, sec.toInt())
-                            CommandSender.send(context, ControlCommand.StartPeriodic(sec * 1000L))
+                            postScenarioCmd(
+                                ScenarioCommands.START_PERIODIC,
+                                mapOf(ScenarioCommands.INTERVAL_MS to (sec * 1000L))
+                            )
                         } else {
-                            CommandSender.send(context, ControlCommand.StopPeriodic)
+                            postScenarioCmd(ScenarioCommands.STOP_PERIODIC)
                         }
                     }
                 )
@@ -154,7 +173,10 @@ object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
                         if (sec != null && sec > 0L) {
                             ScenarioPrefs.setPeriodicIntervalSec(context, sec.toInt())
                             if (periodicEnabled) {
-                                CommandSender.send(context, ControlCommand.StartPeriodic(sec * 1000L))
+                                postScenarioCmd(
+                                    "start_periodic",
+                                    mapOf("intervalMs" to (sec * 1000L))
+                                )
                             }
                         }
                     },
@@ -193,16 +215,7 @@ object ScenarioPluginSettingsDefinition : PluginSettingsDefinition {
                     if (!isMyAccessibilityServiceEnabled(context)) {
                         a11ySettingsLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     } else {
-                        val bus =
-                            (context.applicationContext as com.brain.tracscript.core.TracScriptApp)
-                                .pluginRuntime.dataBus
-
-                        bus.post(
-                            com.brain.tracscript.core.DataBusEvent(
-                                type = "scenario_cmd",
-                                payload = mapOf("cmd" to "open_app")
-                            )
-                        )
+                        postScenarioCmd(ScenarioCommands.OPEN_APP)
                     }
                 },
                 modifier = Modifier

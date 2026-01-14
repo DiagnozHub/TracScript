@@ -59,12 +59,12 @@ data class GpsConfig(
 
 object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
-    override val id: String = "gps_wialon"
+    override val id: String = GpsPluginKey.ID
 
     @Composable
     override fun displayName(): String = "GPS"
 
-    const val PREFS = "plugin_gps_wialon"
+    const val PREFS = GpsPluginKey.PREFS
     const val KEY_ENABLED = "enabled"
     const val KEY_HOST = "host"
     const val KEY_PORT = "port"

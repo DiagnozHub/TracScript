@@ -196,6 +196,9 @@
 
     <string name="service_stopped_due_to_protocol_change">Protocol changed - service stopped</string>
     <string name="auto_scroll">Auto-scroll</string>
-
+    <string name="default_scenario_name">Scenario 1</string>
+    <string name="scenario_scheduled_restart">Scheduled scenario restart</string>
+    <string name="scenario_periodic_enabled">Periodic execution every %1$d sec enabled</string>
+    <string name="scenario_periodic_disabled">Periodic execution disabled</string>
 
 </resources>

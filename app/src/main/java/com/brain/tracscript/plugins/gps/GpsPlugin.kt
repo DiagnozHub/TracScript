@@ -57,7 +57,7 @@ class GpsSendBlockedException(
 
 class GpsPlugin (private val appCtx: Context) : Plugin {
 
-    override val id: String = "gps_wialon"
+    override val id: String = GpsPluginKey.ID
     override val displayName: String = "GPS plugin"
 
     private var context: PluginContext? = null

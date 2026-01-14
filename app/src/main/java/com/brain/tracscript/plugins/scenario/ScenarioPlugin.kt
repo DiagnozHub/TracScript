@@ -5,7 +5,7 @@ import com.brain.tracscript.core.Plugin
 import com.brain.tracscript.core.PluginContext
 
 object ScenarioPrefs {
-    const val PREFS = "plugin_scenario"
+    const val PREFS = ScenarioPluginKey.PREFS
 
     const val KEY_ENABLED = "enabled"
 
@@ -39,8 +39,8 @@ object ScenarioPrefs {
 }
 
 class ScenarioPlugin (private val appCtx: Context) : Plugin {
-    override val id: String = "scenario"
-    override val displayName: String = "Scenarios"
+    override val id: String = ScenarioPluginKey.ID
+    override val displayName: String = "Scenarios plugin"
 
     private var ctx: PluginContext? = null
 

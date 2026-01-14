@@ -1,6 +1,7 @@
 package com.brain.tracscript.plugins.scenario
 
 import android.content.Context
+import com.brain.tracscript.R
 
 object ScenarioStorage {
 
@@ -8,9 +9,6 @@ object ScenarioStorage {
 
     // новый формат
     private const val KEY_IDS = "scenario_ids"
-
-    // легаси-ключ (один сценарий)
-    private const val KEY_SCENARIO_LEGACY = "scenario_text"
 
     data class Scenario(
         val id: String,
@@ -23,25 +21,9 @@ object ScenarioStorage {
 
     fun loadAll(context: Context): List<Scenario> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
         val rawIds = prefs.getStringSet(KEY_IDS, null)
-
-        // Миграция: если старый формат, поднимаем его в один сценарий
-        if (rawIds == null || rawIds.isEmpty()) {
-            val legacyText = prefs.getString(KEY_SCENARIO_LEGACY, null)
-            val text = legacyText ?: ScenarioDefaults.DEFAULT_SCENARIO
-
-            val scenario = Scenario(
-                id = "main",
-                name = "Сценарий 1",
-                text = text,
-                isMain = true
-            )
-
-            saveAllInternal(prefs, listOf(scenario))
-            return listOf(scenario)
-        }
-
-        val ids = rawIds.toList()
+        val ids = rawIds?.toList().orEmpty()
         val result = mutableListOf<Scenario>()
 
         for (id in ids) {
@@ -63,7 +45,7 @@ object ScenarioStorage {
         if (result.isEmpty()) {
             val scenario = Scenario(
                 id = "main",
-                name = "Сценарий 1",
+                name = context.getString(R.string.default_scenario_name),
                 text = ScenarioDefaults.DEFAULT_SCENARIO,
                 isMain = true
             )
@@ -96,15 +78,7 @@ object ScenarioStorage {
         saveAllInternal(prefs, scenarios)
     }
 
-    fun setMainScenario(context: Context, id: String) {
-        val list = loadAll(context)
-        val updated = list.map {
-            it.copy(isMain = it.id == id)
-        }
-        saveAll(context, updated)
-    }
-
-    fun getMainScenario(context: Context): Scenario {
+    private fun getMainScenario(context: Context): Scenario {
         val list = loadAll(context)
         return list.find { it.isMain } ?: list.first()
     }
@@ -118,27 +92,6 @@ object ScenarioStorage {
         } catch (_: Exception) {
             null
         }
-    }
-
-    /** Старый метод: сохранит текст в текущий главный сценарий */
-    fun save(context: Context, text: String) {
-        val list = loadAll(context)
-        if (list.isEmpty()) {
-            val s = Scenario(
-                id = "main",
-                name = "Сценарий 1",
-                text = text,
-                isMain = true
-            )
-            saveAll(context, listOf(s))
-            return
-        }
-
-        val main = list.find { it.isMain } ?: list.first()
-        val updated = list.map {
-            if (it.id == main.id) it.copy(text = text) else it
-        }
-        saveAll(context, updated)
     }
 
     // --- Внутреннее сохранение ---
@@ -165,9 +118,6 @@ object ScenarioStorage {
             editor.putString("scenario_${s.id}_text", s.text)
             editor.putBoolean("scenario_${s.id}_is_main", s.isMain)
         }
-
-        // старый одинарный сценарий больше не используем
-        editor.remove(KEY_SCENARIO_LEGACY)
 
         editor.apply()
     }

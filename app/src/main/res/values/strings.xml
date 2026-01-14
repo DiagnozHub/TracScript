@@ -194,7 +194,11 @@
     <string name="imei_required">Заполните IMEI</string>
 
     <string name="service_stopped_due_to_protocol_change">Протокол изменён - сервис остановлен</string>
-    <string name="auto_scroll">Автопрокрутка</string>
+    <string name="auto_scroll">Авто-скролл</string>
+    <string name="default_scenario_name">Сценарий 1</string>
+    <string name="scenario_scheduled_restart">Плановый перезапуск сценария</string>
+    <string name="scenario_periodic_enabled">Периодический запуск каждые %1$d сек включен</string>
+    <string name="scenario_periodic_disabled">Периодический запуск выключен</string>
 
 
 </resources>
