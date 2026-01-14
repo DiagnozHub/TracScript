@@ -25,5 +25,10 @@ Currently implemented plugins include:
 - Scenarios - allows controlling an Android smartphone: launching applications, searching for text, pressing buttons, and more.
 The main idea of the Scenarios plugin is to collect required information from the smartphone and transmit it to navigation servers together with GPS coordinates.
 
+## Images
+<img src="https://github.com/user-attachments/assets/87167e87-c022-41c0-b842-00ea80043974"
+     width="400">
+
+
 ## Author
 Contact: diagnoz174@gmail.com
