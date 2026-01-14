@@ -5,14 +5,11 @@ The project is designed for both industrial and private use cases, including tra
 
 ## Key Features
 - GPS data collection (Location API, NMEA)
-- Motion detection based on accelerometer data (MotionDetector)
+- Motion detection based on accelerometer data
 - Coordinate filtering and normalization (warmup, anchor logic)
-- Local telemetry storage (SQLite)
-- Reliable data transmission with retry logic
 - Plugin-based architecture (enable/disable modules without rebuilding)
 - Support for multiple tracking protocols
 - Extended debug logging with UI log viewer
-- Background operation (Foreground Service, auto-start)
 
 ## Supported Navigation Data Protocols
 - OsmAnd (Traccar-compatible)
