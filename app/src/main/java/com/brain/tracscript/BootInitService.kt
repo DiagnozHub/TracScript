@@ -33,8 +33,7 @@ class BootInitService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION) {
             val app = application as TracScriptApp
-            // attachEnabled внутри уже безопасен: attached HashSet не даст задублировать
-            app.pluginRuntime.attachEnabled()
+            app.pluginRuntime.attachAllOnce()
             stopSelf()
         }
         return START_NOT_STICKY

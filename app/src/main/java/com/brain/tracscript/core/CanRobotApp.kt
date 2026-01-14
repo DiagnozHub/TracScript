@@ -9,6 +9,6 @@ class TracScriptApp : Application() {
     override fun onCreate() {
         super.onCreate()
         pluginRuntime = PluginRuntime(applicationContext)
-        pluginRuntime.attachEnabled()
+        pluginRuntime.attachAllOnce()
     }
 }

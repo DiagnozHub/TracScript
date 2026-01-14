@@ -40,7 +40,7 @@ object ScenarioPrefs {
 
 class ScenarioPlugin (private val appCtx: Context) : Plugin {
     override val id: String = "scenario"
-    override val displayName: String = "Сценарии"
+    override val displayName: String = "Scenarios"
 
     private var ctx: PluginContext? = null
 
@@ -56,10 +56,6 @@ class ScenarioPlugin (private val appCtx: Context) : Plugin {
     }
 
     override fun isEnabled(): Boolean {
-        //val c = ctx?.appContext ?: return false
-        //return isScenarioPluginEnabled(c)
-
-        //return isScenarioPluginEnabled(appCtx)
         return  ScenarioPrefs.isEnabled(appCtx)
     }
 }

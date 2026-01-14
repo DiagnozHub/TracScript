@@ -58,7 +58,7 @@ class GpsSendBlockedException(
 class GpsPlugin (private val appCtx: Context) : Plugin {
 
     override val id: String = "gps_wialon"
-    override val displayName: String = "GPS + Wialon plugin"
+    override val displayName: String = "GPS plugin"
 
     private var context: PluginContext? = null
     private var busSub: Subscription? = null
@@ -68,14 +68,11 @@ class GpsPlugin (private val appCtx: Context) : Plugin {
     private val pluginScope = CoroutineScope(pluginJob + Dispatchers.IO)
 
     override fun isEnabled(): Boolean {
-        //val ctx = context ?: return false
-        //val cfg = loadGpsConfig(ctx.appContext)
-        //return cfg.enabled
-
         return loadGpsConfig(appCtx).enabled
     }
 
     override fun onAttach(context: PluginContext) {
+
         this.context = context
         this.telemetryRepo = TelemetryRepository(context.appContext)
 
@@ -91,16 +88,6 @@ class GpsPlugin (private val appCtx: Context) : Plugin {
         }
 
         applyEnabledFromPrefs(context)
-
-        /*
-        // Если включен — стартуем foreground-сервис
-        if (isEnabled()) {
-            context.log(id, "gps_wialon включён — запускаю GpsService")
-            GpsService.start(context.appContext)
-        } else {
-            context.log(id, "gps_wialon выключен — сервис не запускаю")
-        }
-        */
     }
 
     private fun applyEnabledFromPrefs(context: PluginContext) {
@@ -139,11 +126,11 @@ class GpsPlugin (private val appCtx: Context) : Plugin {
 
         when (event.type) {
 
-            "plugin_enabled_changed" -> {
-                val pid = event.payload["pluginId"] as? String ?: return
+            GPSWialonSettings.PLUGIN_ENABLED_CHANGED_EVENT -> {
+                val pid = event.payload[GPSWialonSettings.PLUGIN_ID] as? String ?: return
                 if (pid != id) return
 
-                val enabled = event.payload["enabled"] as? Boolean ?: return
+                val enabled = event.payload[GPSWialonSettings.KEY_ENABLED] as? Boolean ?: return
 
                 context?.log(id, "plugin_enabled_changed = $enabled")
 

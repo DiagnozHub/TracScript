@@ -70,6 +70,8 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
     const val KEY_PORT = "port"
     const val KEY_IMEI = "imei"
     const val KEY_PASSWORD = "password"
+    const val PLUGIN_ENABLED_CHANGED_EVENT = "plugin_enabled_changed"
+    const val PLUGIN_ID = "pluginId"
 
     const val KEY_GPS_INTERVAL_SEC = "gps_interval_sec"
     const val KEY_GPS_MIN_DISTANCE_M = "gps_min_distance_m"
@@ -199,7 +201,8 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         }
 
         fun saveEnabled(value: Boolean) {
-            prefs.edit().putBoolean(KEY_ENABLED, value).apply()
+            // КРИТИЧНО: commit(), не apply()
+            prefs.edit().putBoolean(KEY_ENABLED, value).commit()
         }
 
         fun saveHost(value: String) {
@@ -305,12 +308,13 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
         fun notifyEnabledChanged(isEnabled: Boolean) {
             val bus = (context.applicationContext as TracScriptApp).pluginRuntime.dataBus
+
             bus.post(
                 DataBusEvent(
-                    type = "plugin_enabled_changed",
+                    type = PLUGIN_ENABLED_CHANGED_EVENT,
                     payload = mapOf(
-                        "pluginId" to "gps_wialon",
-                        "enabled" to isEnabled
+                        PLUGIN_ID to id,
+                        KEY_ENABLED to isEnabled
                     )
                 )
             )

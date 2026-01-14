@@ -38,6 +38,7 @@ class PluginRuntime(appContext: Context) {
 
     private val attached = HashSet<String>()
 
+    /*
     fun attachEnabled() {
         for (p in plugins) {
             if (!p.isEnabled()) continue
@@ -46,6 +47,7 @@ class PluginRuntime(appContext: Context) {
             }
         }
     }
+    */
 
     /*
     fun detachAll() {
@@ -57,6 +59,7 @@ class PluginRuntime(appContext: Context) {
         }
         job.cancel()
     }
+    */
 
     fun attachAllOnce() {
         for (p in plugins) {
@@ -65,6 +68,5 @@ class PluginRuntime(appContext: Context) {
             }
         }
     }
-     */
 
 }

@@ -9,7 +9,6 @@ import com.brain.tracscript.plugins.scenario.ScenarioPluginSettingsDefinition
 
 interface PluginSettingsDefinition {
     val id: String
-    //val displayName: String
 
     @Composable
     fun displayName(): String
