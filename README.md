@@ -1,7 +1,7 @@
 # TracScript
 
-TracScript is an Android platform for collecting, processing, and transmitting telemetry from mobile devices and external sources (GPS, accelerometer, system events), with support for plugins and multiple tracking protocols.
-The project is designed for both industrial and private use cases, including transportation, telematics, diagnostics, automation, and integration with monitoring systems such as Traccar <https://github.com/traccar/traccar>, Wialon.
+TracScript is an Android client for the Traccar GPS tracking server (<https://github.com/traccar/traccar>).
+It runs on a smartphone or industrial Android device, collects navigation and sensor data, and sends it to Traccar using compatible protocols.
 
 ## Key Features
 - GPS data collection (Location API, NMEA)
@@ -19,7 +19,7 @@ The project is designed for both industrial and private use cases, including tra
 All application functionality is implemented via plugins.
 Currently implemented plugins include:
 - GPS collection, processing, and transmission of navigation coordinates to telematics servers.
-- Scenarios - allows controlling an Android smartphone: launching applications, searching for text, pressing buttons, and more.
+- Scenarios (experimental) - allows controlling an Android smartphone: launching applications, searching for text, pressing buttons, and more.
 The main idea of the Scenarios plugin is to collect required information from the smartphone and transmit it to navigation servers together with GPS coordinates.
 
 ## Screenshots
