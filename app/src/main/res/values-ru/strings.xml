@@ -1,0 +1,204 @@
+<resources>
+    <string name="app_name">TracScript</string>
+    <string name="accessibility_description">Мониторинг и автоматизация</string>
+    <string name="customize_dashboards_view">Настройте отображение своих дашбордов</string>
+    <string name="pin_dashboards_hint">Закрепите нужные информационные блоки, и здесь появятся ваши панели управления.</string>
+    <string name="configure">Настроить</string>
+    <string name="general_settings">Общие настройки</string>
+    <string name="tracscript_settings_description">Параметры работы TracScript и служебные инструменты для отладки.</string>
+    <string name="settings">Настройки</string>
+    <string name="general">Общие</string>
+    <string name="prevent_screen_off">Запретить гасить экран</string>
+    <string name="plugin_settings">Настройки плагинов</string>
+    <string name="service_tools">Служебные инструменты</string>
+    <string name="open_accessibility_settings">Открыть настройки спец. возможностей</string>
+    <string name="open_node_dump">Открыть дамп нод</string>
+    <string name="open_log">Открыть лог</string>
+    <string name="close">Закрыть</string>
+    <string name="no_plugins_available">Нет доступных плагинов</string>
+    <string name="settings_reset_to_default">Настройки возвращены к стандартным</string>
+    <string name="background_location_granted">Фоновый доступ к геолокации выдан, GPS включён</string>
+    <string name="battery_optimization_warning">Теперь разрешите работу без ограничений батареи, иначе GPS будет останавливаться с выключенным экраном</string>
+    <string name="background_location_required_warning">Без фонового доступа к геолокации GPS может не работать с выключенным экраном.</string>
+    <string name="location_permission_required">Без разрешения на геолокацию плагин работать не будет.</string>
+    <string name="gps_unrestricted">GPS включён без ограничений батареи</string>
+    <string name="battery_optimization_required">Разрешите работу без ограничений батареи, иначе GPS будет останавливаться с выключенным экраном</string>
+    <string name="notification_permission_required">Без разрешения на уведомления плагин GPS не будет включён.</string>
+    <string name="enabled">Включено</string>
+    <string name="show_on_main_screen">Отобразить в главном окне</string>
+    <string name="server_address">Адрес сервера</string>
+    <string name="server_port">Порт сервера</string>
+    <string name="device_imei">IMEI устройства</string>
+    <string name="device_password">Пароль устройства</string>
+    <string name="gps_filter_settings">Параметры фильтра GPS</string>
+    <string name="interval_seconds">Интервал, сек</string>
+    <string name="min_distance_meters">Мин. расстояние, м</string>
+    <string name="min_course_change">Мин. изменение курса, °</string>
+    <string name="accelerometer">Акселерометр</string>
+    <string name="no_data">Нет данных</string>
+    <string name="recent_motion">Свежее движение</string>
+    <string name="fading">Затухает</string>
+    <string name="inactive">Погасло</string>
+    <string name="motion_info">
+    Уверенность: %1$s%%
+    \nСекунд с события: %2$s
+    \nИнтерпретация: %3$s
+    </string>
+    <string name="motion_sensitivity">
+    Чувствительность (motionThreshold): %1$s
+    </string>
+    <string name="confidence_threshold">
+    Порог прохождения уверенности: %1$s%%
+    </string>
+    <string name="basic">Базовые</string>
+    <string name="lock">Заблокировать</string>
+    <string name="unlock">Разблокировать</string>
+    <string name="gps_android_data">GPS (данные от Android)</string>
+    <string name="error">Ошибка</string>
+    <string name="error_with_details">
+    Ошибка: %1$s
+    </string>
+    <string name="gps_debug_info">
+    lat: %1$s
+    \nlon: %2$s
+    \nСпутники: %3$s
+    \nВремя: %4$s
+    \nТочность: %5$s m
+    \nСкорость: %6$s km/h
+    </string>
+    <string name="nmea_raw_data">NMEA (сырые данные с приемника GPS)</string>
+    <string name="nmea_error_with_details">
+    Ошибка NMEA: %1$s
+    </string>
+    <string name="gps_health_info">
+    NMEA поток: %1$s
+    \nFIX: %2$s
+    \nСпутники (GGA): %3$s
+    \nHDOP: %4$s
+    \nКачество: %5$s
+    \nRMC valid: %6$s
+    </string>
+
+    <string name="status_ok">OK</string>
+    <string name="status_yes">есть</string>
+    <string name="status_no">нет</string>
+    <string name="not_available">NA</string>
+
+    <string name="last_nmea_sentence">
+    Последнее: %1$s
+    </string>
+    <string name="scenarios">Сценарии</string>
+    <string name="repeat_scenario_every">Повторять сценарий каждые</string>
+    <string name="seconds">сек</string>
+    <string name="scenario_editor">Редактор сценария</string>
+    <string name="open_scenario_editor">Открыть редактор сценариев</string>
+    <string name="run_scenario">Запустить сценарий</string>
+    <string name="scenario_list">Список сценариев</string>
+    <string name="toggle_editor_theme">Переключить тему редактора</string>
+    <string name="scenarios_saved">Сценарии сохранены</string>
+    <string name="save">Сохранить</string>
+    <string name="scenario">Сценарий</string>
+    <string name="scenario_default_name">Сценарий %1$d</string>
+    <string name="cannot_delete_only_scenario">Нельзя удалить единственный сценарий</string>
+    <string name="nothing_to_delete">Нечего удалять</string>
+    <string name="scenario_deleted_notice">Сценарий удалён (не забудь нажать «Сохранить»)</string>
+    <string name="no_scenarios_to_edit">Нет сценариев для редактирования</string>
+    <string name="scenario_name">Имя сценария</string>
+    <string name="selected_for_editing">Выбран для редактирования</string>
+    <string name="main">Главный</string>
+    <string name="make_main_multiline">Сделать\nглавным</string>
+    <string name="notif_nav_server">Навигационный сервер %1$s:%2$d</string>
+    <string name="background_gps_sending">Фоновая отправка GPS</string>
+    <string name="clear">Очистить</string>
+
+    <string name="dump_not_created">
+    Файл дампа ещё не создан.
+    \nВключи режим исследования и потапай по экрану.
+    </string>
+
+    <string name="dump_read_error">
+    Ошибка чтения файла дампа: %1$s
+    </string>
+    <string name="update">Обновить</string>
+    <string name="debug_log_empty">Файл debug.log пуст или не найден</string>
+    <string name="nodes_dump">Дамп нод</string>
+    <string name="protocol">Протокол</string>
+    <string name="log_file">Лог-файл</string>
+    <string name="expl_mode_on">Режим исследования: ВКЛ. Тапай по экрану, смотрим координаты.</string>
+    <string name="expl_mode_off">Режим исследования: ВЫКЛ</string>
+    <string name="scenario_start_by_command">Запуск сценария по команде</string>
+    <string name="expl_mode_enabling">Включаю режим исследования</string>
+    <string name="expl_mode_disabling">Выключаю режим исследования</string>
+    <string name="unknown_command">Неизвестная команда: %1$s</string>
+    <string name="scenario_empty">Сценарий пуст</string>
+    <string name="scenario_start_steps">Запускаю сценарий, шагов: %1$d</string>
+    <string name="scenario_finished">Сценарий завершён</string>
+    <string name="scenario_step_delay">Шаг[%1$d]: ЗАДЕРЖКА %2$d мс</string>
+    <string name="scenario_step_wait_text">Шаг[%1$d]: ОЖИДАНИЕ_ТЕКСТА \'%2$s\'</string>
+    <string name="scenario_step_click_text">Шаг[%1$d]: КЛИК_ПО_ТЕКСТУ \'%2$s\'</string>
+    <string name="scenario_step_tap">Шаг %1$d: TAP x=%2$.3f y=%3$.3f</string>
+    <string name="scenario_step_launch_app">Шаг[%1$d]: ЗАПУСК_ПРИЛОЖЕНИЯ %2$s</string>
+    <string name="scenario_step_close_app">Шаг[%1$d]: ЗАКРЫТИЕ_ПРИЛОЖЕНИЯ %2$s</string>
+    <string name="scenario_step_kill_app_root">Шаг[%1$d]: ПРИНУДИТЕЛЬНОЕ_ЗАВЕРШЕНИЕ_ROOT %2$s</string>
+    <string name="scenario_step_extract_table_by_id">Шаг[%1$d]: ИЗВЛЕЧЕНИЕ_ТАБЛИЦЫ_ПО_ID id=%2$s файл=%3$s</string>
+    <string name="extract_expandable_list">Извлекаю ExpandableList id=%1$s</string>
+    <string name="command_deprecated">Команда устарела</string>
+    <string name="scenario_step_send_table_to_bus">Шаг[%1$d]: SEND_TABLE_TO_BUS файл=\'%2$s\'</string>
+    <string name="send_table_file_not_found_or_empty">SEND_TABLE_TO_BUS: файл \'%1$s\' не найден или пуст</string>
+    <string name="send_table_event_sent">SEND_TABLE_TO_BUS: событие wialon_table_json отправлено в шину</string>
+    <string name="scenario_step_delete_file">Шаг[%1$d]: DELETE_FILE файл=\'%2$s\'</string>
+    <string name="scenario_step_back">Шаг[%1$d]: НАЗАД (GLOBAL_ACTION_BACK)</string>
+    <string name="scenario_if_condition_error">IF: ошибка условия %1$s</string>
+    <string name="scenario_step_if_result">Шаг[%1$d]: IF %2$s → %3$b</string>
+    <string name="scenario_step_stop">Шаг[%1$d]: STOP_SCENARIO — прекращаю сценарий</string>
+    <string name="scenario_step_screen_on">Шаг[%1$d]: SCREEN_ON</string>
+    <string name="scenario_step_screen_off">Шаг[%1$d]: SCREEN_OFF</string>
+    <string name="scenario_step_light">Шаг[%1$d]: LIGHT %2$d</string>
+    <string name="expandable_list_not_found">ExpandableList id=%1$s не найден</string>
+    <string name="table_not_found_no_errors_written">Таблица не найдена — записал NO_ERRORS</string>
+    <string name="table_saved">Таблица сохранена в %1$s</string>
+    <string name="extract_table_by_id_error">Ошибка EXTRACT_TABLE_BY_ID</string>
+    <string name="click_button_with_text">Жму кнопку с текстом: "%1$s"</string>
+    <string name="root_window_null_cannot_click">rootInActiveWindow = null, не могу кликнуть по "%1$s"</string>
+    <string name="element_with_text_not_found">Не нашёл элемент с текстом: "%1$s"</string>
+    <string name="click_text_success">Успешно кликнул по: "%1$s"</string>
+    <string name="click_text_failed">Не удалось кликнуть по: "%1$s"</string>
+    <string name="click_text_error">Ошибка при клике по: "%1$s"</string>
+    <string name="found_expected_text">Нашёл текст: "%1$s"</string>
+    <string name="timeout_while_searching">TIMEOUT при поиске: "%1$s"</string>
+    <string name="search_error">Ошибка при поиске: "%1$s"</string>
+    <string name="delay_progress">DELAY %1$d/%2$d мс (осталось %3$d мс)</string>
+    <string name="searching_text">Ищу текст: "%1$s"</string>
+    <string name="returning_to_home">Возвращаюсь на рабочий стол...</string>
+    <string name="launching_app">Запускаю %1$s...</string>
+    <string name="app_active">%1$s активен</string>
+    <string name="app_launch_timeout">Не дождался запуска %1$s (TIMEOUT)</string>
+    <string name="recents_card_not_found">Не нашёл карточку %1$s в Recents</string>
+    <string name="recents_card_container_not_found">Не смог определить контейнер карточки %1$s</string>
+    <string name="swiping_app_from_recents">Смахиваю %1$s из Recents...</string>
+    <string name="closing_app_via_recents">Закрываю %1$s через Recents...</string>
+    <string name="root_kill_force_stop">ROOT KILL: убиваю %1$s</string>
+    <string name="root_kill_error">ROOT KILL: ошибка для %1$s</string>
+    <string name="imei_length_error">IMEI должен быть от 6 до 14 цифр</string>
+    <string name="server_port_placeholder">Порт, например 20332</string>
+    <string name="server_host_placeholder">IP или доменное имя сервера</string>
+
+
+    <string name="battery_settings_not_found">Нет экрана для настройки батареи</string>
+    <string name="battery_settings_open_failed">Не удалось открыть настройки батареи: %1$s</string>
+    <string name="turned_off">Выключено</string>
+    <string name="bg_location_required">Нужен фоновой доступ к геолокации</string>
+
+    <string name="server_required">Заполните сервер</string>
+    <string name="port_required">Заполните порт</string>
+    <string name="imei_required">Заполните IMEI</string>
+
+    <string name="service_stopped_due_to_protocol_change">Протокол изменён - сервис остановлен</string>
+    <string name="auto_scroll">Авто-скролл</string>
+    <string name="default_scenario_name">Сценарий 1</string>
+    <string name="scenario_scheduled_restart">Плановый перезапуск сценария</string>
+    <string name="scenario_periodic_enabled">Периодический запуск каждые %1$d сек включен</string>
+    <string name="scenario_periodic_disabled">Периодический запуск выключен</string>
+
+
+</resources>
