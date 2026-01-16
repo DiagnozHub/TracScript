@@ -18,8 +18,8 @@ It runs on a smartphone or industrial Android device, collects navigation and se
 ## Plugins
 All application functionality is implemented via plugins.
 Currently implemented plugins include:
-- GPS collection, processing, and transmission of navigation coordinates to telematics servers.
-- Scenarios (experimental) - allows controlling an Android smartphone: launching applications, searching for text, pressing buttons, and more.
+- **GPS plugin**, processing, and transmission of navigation coordinates to telematics servers.
+- **Scenarios plugin** (experimental) - allows controlling an Android smartphone: launching applications, searching for text, pressing buttons, and more.
 The main idea of the Scenarios plugin is to collect required information from the smartphone and transmit it to navigation servers together with GPS coordinates.
 
 ## Screenshots
