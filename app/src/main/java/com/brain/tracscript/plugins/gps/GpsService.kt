@@ -500,7 +500,7 @@ class GpsService : Service(), CoroutineScope {
 
                         if (isTransientNetworkError(e)) {
                             logGps?.e(TAG, "CORE send FAILED (network, keep queued) id=${core.id} err=${e.message}", e)
-                            delay(10_000L)
+                            delay(30_000L)
                         } else {
                             logGps?.e(TAG, "CORE send FAILED (skip permanent) id=${core.id} err=${e.message}", e)
                             repo.markCoreEventSent(core.id)
@@ -659,12 +659,21 @@ class GpsService : Service(), CoroutineScope {
             is java.net.UnknownHostException,
             is java.net.NoRouteToHostException,
             is java.io.InterruptedIOException -> true
+
+            is javax.net.ssl.SSLException -> true
+
             else -> {
-                val msg = (t.message ?: "").lowercase()
+                val msg = (e?.message ?: "").lowercase()
                 msg.contains("failed to connect") ||
                         msg.contains("timeout") ||
                         msg.contains("unable to resolve host") ||
-                        msg.contains("no route to host")
+                        msg.contains("no route to host") ||
+                        msg.contains("connection reset") ||
+                        msg.contains("broken pipe") ||
+                        msg.contains("ssl") ||                 // на всякий случай
+                        msg.contains("certificate") ||         // и это тоже (иногда прилетает как IOException)
+                        msg.contains("certpath") ||
+                        msg.contains("hostname")
             }
         }
     }

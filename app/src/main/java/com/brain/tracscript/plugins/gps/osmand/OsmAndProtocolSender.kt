@@ -47,10 +47,36 @@ class OsmAndProtocolSender(
         Log.d(TAG, "sendCoreEvent ignored for OsmAnd (coreId=${core.id})")
     }
 
-    private fun buildBaseUrl(host: String, port: Int): String {
-        val h = host.trim().trimEnd('/')
-        // Протокол OsmAnd в старом приложении работает через обычный http://
-        return "http://$h:$port/"
+    /**
+     * cfg.host теперь может быть:
+     *  - "example.com"
+     *  - "http://example.com"
+     *  - "https://example.com"
+     *  - "https://example.com:8443"
+     *
+     * cfg.port используем только если порт НЕ указан прямо в host.
+     */
+    private fun buildBaseUrl(hostRaw: String, portFromCfg: Int): String {
+        var h = hostRaw.trim().trimEnd('/')
+
+        // если схема не указана — по умолчанию http
+        if (!h.startsWith("http://", ignoreCase = true) && !h.startsWith("https://", ignoreCase = true)) {
+            h = "http://$h"
+        }
+
+        val u = Uri.parse(h)
+
+        val scheme = u.scheme ?: "http"
+        val host = u.host ?: run {
+            // на случай кривого ввода типа "https://"
+            throw IllegalArgumentException("Bad host: '$hostRaw'")
+        }
+
+        // порт: приоритет у того, что в host, иначе берем cfg.port
+        val port = if (u.port != -1) u.port else portFromCfg
+
+        // если порт стандартный — можно не добавлять, но добавим всегда для предсказуемости
+        return "$scheme://$host:$port/"
     }
 
     private fun buildRequestUrl(
@@ -122,29 +148,41 @@ class OsmAndProtocolSender(
     }
 
     /**
-     * Как в старом RequestManager:
-     * - method POST
-     * - без body
-     * - connect + drain inputStream
-     * - успех = не поймали IOException
+     * POST без body.
+     * ВАЖНО:
+     * - читаем responseCode
+     * - читаем errorStream если код не 2xx
      */
     private fun httpPostNoBody(requestUrl: String) {
         var conn: HttpURLConnection? = null
         try {
-            conn = (URL(requestUrl).openConnection() as HttpURLConnection)
-            conn.readTimeout = TIMEOUT_MS
-            conn.connectTimeout = TIMEOUT_MS
-            conn.requestMethod = "POST"
+            conn = (URL(requestUrl).openConnection() as HttpURLConnection).apply {
+                readTimeout = TIMEOUT_MS
+                connectTimeout = TIMEOUT_MS
+                requestMethod = "POST"
+                instanceFollowRedirects = true
+                setRequestProperty("Connection", "close")
+            }
 
             conn.connect()
 
-            conn.inputStream.use { input ->
-                while (input.read() != -1) {
-                    // drain
-                }
+            val code = conn.responseCode
+            val ok = code in 200..299
+
+            val stream = if (ok) conn.inputStream else (conn.errorStream ?: conn.inputStream)
+            val body = try {
+                stream.use { it.readBytes().toString(Charsets.UTF_8) }
+            } catch (_: Throwable) {
+                ""
             }
+
+            if (!ok) {
+                throw IllegalStateException("OsmAnd POST failed: HTTP $code body='${body.take(300)}'")
+            }
+
         } catch (e: IOException) {
-            throw IllegalStateException("OsmAnd POST failed: ${e.message}", e)
+            // тут будут и TLS ошибки (SSLHandshakeException), и таймауты
+            throw IllegalStateException("OsmAnd POST failed: ${e.javaClass.simpleName}: ${e.message}", e)
         } finally {
             try { conn?.disconnect() } catch (_: Exception) {}
         }
