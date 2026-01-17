@@ -43,6 +43,9 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     appVersion = version,
                     onOpenSettings = {
+
+                        markReturnedFromSettings(this)
+
                         startActivity(
                             Intent(this, SettingsActivity::class.java)
                         )
@@ -54,6 +57,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+private const val PREF_UI = "ui_flags"
+private const val KEY_RETURNED_FROM_SETTINGS = "returned_from_settings"
+
+private fun setUiFlag(context: Context, key: String, value: Boolean) {
+    context.getSharedPreferences(PREF_UI, Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(key, value)
+        .apply()
+}
+
+private fun markReturnedFromSettings(context: Context) {
+    setUiFlag(context, KEY_RETURNED_FROM_SETTINGS, true)
+}
+
+private fun clearReturnedFromSettingsFlag(context: Context) {
+    setUiFlag(context, KEY_RETURNED_FROM_SETTINGS, false)
+}
+
 
 private fun prefsNameFor(pluginId: String): String = "plugin_$pluginId"
 
@@ -110,17 +132,31 @@ fun MainScreen(
     val pinnedDefs = rememberPinnedPluginDefs()
 
     val lifecycleOwner = LocalLifecycleOwner.current
+    val context = LocalContext.current
+    val prefsUi = remember {
+        context.getSharedPreferences(PREF_UI, Context.MODE_PRIVATE)
+    }
+
     var resumeTick by remember { mutableIntStateOf(0) }
 
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                resumeTick++
+
+                val shouldReset =
+                    prefsUi.getBoolean(KEY_RETURNED_FROM_SETTINGS, false)
+
+                if (shouldReset) {
+                    clearReturnedFromSettingsFlag(context)
+
+                    resumeTick++
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
+
 
     Column(
         modifier = modifier
@@ -182,119 +218,80 @@ fun MainScreen(
                         .weight(1f)
                 ) {
 
-                    if (pinnedDefs.isEmpty()) {
 
-                        Box(
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Card(
                             modifier = Modifier
-                                .fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .widthIn(max = 520.dp),
+                            shape = MaterialTheme.shapes.extraLarge,
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                         ) {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp)
-                                    .widthIn(max = 520.dp),
-                                shape = MaterialTheme.shapes.extraLarge,
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                                ),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                            Column(
+                                modifier = Modifier.padding(20.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(20.dp),
-                                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                                Row(
+                                    verticalAlignment = Alignment.Top
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.Top
-                                    ) {
-                                        /*
-                                        Surface(
-                                            shape = MaterialTheme.shapes.large,
-                                            color = MaterialTheme.colorScheme.primaryContainer
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Edit,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                modifier = Modifier.padding(10.dp)
-                                            )
-                                        }
+                                    Spacer(Modifier.width(12.dp))
 
-                                         */
-
-                                        Spacer(Modifier.width(12.dp))
-
-                                        Column {
-                                            Text(
-                                                text = stringResource(R.string.customize_dashboards_view),
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-
-                                            Spacer(Modifier.height(6.dp))
-
-                                            Text(
-                                                text = stringResource(R.string.pin_dashboards_hint),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(
-                                                    alpha = 0.75f
-                                                )
-                                            )
-                                        }
-                                    }
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Center
-                                    ) {
-                                        val context = LocalContext.current
-                                        Button(
-                                            onClick = {
-                                                context.startActivity(
-                                                    Intent(
-                                                        context,
-                                                        PluginSettingsActivity::class.java
-                                                    )
-                                                )
-                                            }
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Settings,
-                                                contentDescription = null,
-                                                modifier = Modifier.padding(end = 8.dp)
-                                            )
-                                            Text(stringResource(R.string.configure))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                    } else {
-
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            pinnedDefs.forEach { def ->
-                                Card(modifier = Modifier.fillMaxWidth()) {
-                                    Column(Modifier.padding(12.dp)) {
+                                    Column {
                                         Text(
-                                            text = def.displayName(),
+                                            text = stringResource(R.string.customize_dashboards_view),
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.SemiBold
                                         )
-                                        Spacer(Modifier.height(8.dp))
-                                        def.Content()
+
+                                        Spacer(Modifier.height(6.dp))
+
+                                        Text(
+                                            text = stringResource(R.string.pin_dashboards_hint),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(
+                                                alpha = 0.75f
+                                            )
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Button(
+                                        onClick = {
+
+                                            markReturnedFromSettings(context)
+
+                                            context.startActivity(
+                                                Intent(
+                                                    context,
+                                                    PluginSettingsActivity::class.java
+                                                )
+                                            )
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Settings,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(end = 8.dp)
+                                        )
+                                        Text(stringResource(R.string.configure))
                                     }
                                 }
                             }
                         }
                     }
                 }
-
             } else {
                 pinnedDefs.forEach { def ->
                     Card(modifier = Modifier.fillMaxWidth()) {

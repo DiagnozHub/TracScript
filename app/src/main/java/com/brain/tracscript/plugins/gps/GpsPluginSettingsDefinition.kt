@@ -285,27 +285,6 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             return pm.isIgnoringBatteryOptimizations(context.packageName)
         }
 
-        /*
-        fun requestIgnoreBatteryOptimizationsSafe() {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = Uri.parse("package:${context.packageName}")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-
-            try {
-                if (intent.resolveActivity(context.packageManager) != null) {
-                    context.startActivity(intent)
-                } else {
-                    Toast.makeText(context, context.getString(R.string.battery_settings_not_found), Toast.LENGTH_SHORT).show()
-                }
-            } catch (t: Throwable) {
-                Toast.makeText(context, context.getString(R.string.battery_settings_open_failed, t.javaClass.simpleName), Toast.LENGTH_SHORT).show()
-            }
-        }
-        */
-
         fun notifyEnabledChanged(isEnabled: Boolean) {
             val bus = (context.applicationContext as TracScriptApp).pluginRuntime.dataBus
 
@@ -429,9 +408,9 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         val notifLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { granted ->
-            if (!pendingEnable) return@rememberLauncherForActivityResult
             if (!granted) {
-                finalizeDisabled(context.getString(R.string.notification_permission_required))
+                if (pendingEnable) finalizeDisabled(context.getString(R.string.notification_permission_required))
+                else uiEnabled = false
                 return@rememberLauncherForActivityResult
             }
             flowTick++
@@ -440,13 +419,21 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         val fineLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { granted ->
-            if (!pendingEnable) return@rememberLauncherForActivityResult
+            // ВАЖНО: на старых Android коллбэк может прийти, когда pendingEnable ещё false
             if (!granted) {
-                finalizeDisabled(context.getString(R.string.location_permission_required))
+                if (pendingEnable) {
+                    finalizeDisabled(context.getString(R.string.location_permission_required))
+                } else {
+                    // если flow не активен — просто вернуть свитч
+                    uiEnabled = false
+                }
                 return@rememberLauncherForActivityResult
             }
+
+            // разрешение дали — просто пинаем “двигатель”
             flowTick++
         }
+
 
         val bgLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
@@ -457,7 +444,10 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
         // “двигатель” — всегда один, живёт в LaunchedEffect
         LaunchedEffect(pendingEnable, flowTick) {
-            if (!pendingEnable) return@LaunchedEffect
+            if (!pendingEnable) {
+                uiEnabled = enabled
+                return@LaunchedEffect
+            }
 
             // если ждём возврата с экрана батареи — просто не дёргаем ничего
             if (batteryWaiting) return@LaunchedEffect
@@ -473,6 +463,15 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                 return@LaunchedEffect
             }
 
+            // Background location — НЕ блокируем включение, только пытаемся запросить 1 раз
+            if (needBackground() && !bgRequestTried) {
+                bgRequestTried = true
+                bgLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                return@LaunchedEffect
+            }
+
+
+            /*
             if (needBackground()) {
                 if (!bgRequestTried) {
                     bgRequestTried = true
@@ -489,9 +488,18 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                 finalizeDisabled(context.getString(R.string.bg_location_required))
                 return@LaunchedEffect
             }
+            */
 
             // 2) Всё нужное есть -> включаемся СРАЗУ
             finalizeEnabled()
+
+            if (bgSupported() && !hasPerm(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.bg_location_recommended),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
 
             // 3) OPTIONAL: батарея — просто спросить 1 раз, но не выключать если отказ
             if (!hasIgnoreBatteryOptimizations() && !batteryAsked) {

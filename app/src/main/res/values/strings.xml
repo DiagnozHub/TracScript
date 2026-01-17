@@ -201,4 +201,10 @@
     <string name="scenario_periodic_enabled">Periodic execution every %1$d sec enabled</string>
     <string name="scenario_periodic_disabled">Periodic execution disabled</string>
 
+    <string name="bg_location_recommended">
+    For background tracking, allow location access “All the time”.
+    </string>
+
+
+
 </resources>

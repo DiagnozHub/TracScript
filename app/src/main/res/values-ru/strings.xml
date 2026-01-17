@@ -200,5 +200,9 @@
     <string name="scenario_periodic_enabled">Периодический запуск каждые %1$d сек включен</string>
     <string name="scenario_periodic_disabled">Периодический запуск выключен</string>
 
+    <string name="bg_location_recommended">
+    Для работы в фоне включите «Разрешить в любом режиме».
+    </string>
+
 
 </resources>
