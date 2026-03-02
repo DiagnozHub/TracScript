@@ -40,7 +40,9 @@ class ScriptSyntaxHighlightTransformation(
         "SCREEN_ON",
         "SCREEN_OFF",
         "LIGHT",
-        "SEND_TABLE_TO_BUS"
+        "SEND_TABLE_TO_BUS",
+        "GENERATE_WIALON_TABLE",
+        "SHELL_ROOT"
     )
 
     override fun filter(text: AnnotatedString): TransformedText {

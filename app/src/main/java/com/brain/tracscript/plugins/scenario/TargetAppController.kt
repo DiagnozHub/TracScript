@@ -3,12 +3,17 @@ package com.brain.tracscript.plugins.scenario
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.brain.tracscript.R
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Отвечает за:
@@ -36,6 +41,12 @@ class TargetAppController(
 
         private const val RECENTS_SWIPE_DISTANCE_PX = 800
     }
+
+    data class RootExecResult(
+        val exitCode: Int,
+        val stdout: String,
+        val stderr: String
+    )
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -329,6 +340,61 @@ class TargetAppController(
         }, 400L) // лёгкая задержка, чтобы система успела закрыть процесс
     }
 
+    suspend fun execRootCommand(
+        command: String,
+        timeoutMs: Long = 15_000L
+    ): RootExecResult = withContext(Dispatchers.IO) {
+
+        val process = try {
+            ProcessBuilder(listOf("su", "-c", command))
+                .redirectErrorStream(false)
+                .start()
+        } catch (e: Exception) {
+            return@withContext RootExecResult(
+                exitCode = -3,
+                stdout = "",
+                stderr = "start_failed: ${e.message}"
+            )
+        }
+
+        try {
+            val exit = withTimeoutOrNull(timeoutMs.coerceAtLeast(100L)) {
+                process.waitFor()
+            }
+
+            if (exit == null) {
+                try { process.destroy() } catch (_: Exception) {}
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    try { process.destroyForcibly() } catch (_: Exception) {}
+                }
+
+                return@withContext RootExecResult(
+                    exitCode = -1,
+                    stdout = "",
+                    stderr = "timeout_after_${timeoutMs}ms"
+                )
+            }
+
+            val out = try {
+                process.inputStream.bufferedReader().use { it.readText() }
+            } catch (_: Exception) { "" }
+
+            val err = try {
+                process.errorStream.bufferedReader().use { it.readText() }
+            } catch (_: Exception) { "" }
+
+            RootExecResult(
+                exitCode = exit,
+                stdout = out,
+                stderr = err
+            )
+        } finally {
+            try { process.inputStream?.close() } catch (_: Exception) {}
+            try { process.errorStream?.close() } catch (_: Exception) {}
+            try { process.outputStream?.close() } catch (_: Exception) {}
+        }
+    }
 
     /**
      * Просто открыть текущее targetPackage (без закрытия через Recents)

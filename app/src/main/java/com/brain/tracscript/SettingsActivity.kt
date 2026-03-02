@@ -114,19 +114,6 @@ private fun SettingsScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            /*
-            RowWithCheckbox(
-                checked = autoStartEnabled,
-                onCheckedChange = { checked ->
-                    autoStartEnabled = checked
-                    SettingsStorage.setAutoStartEnabled(context, checked)
-                },
-                text = "Автоматически запускать сценарий при старте устройства"
-            )
-            */
-
-            
-
             RowWithCheckbox(
                 checked = preventScreenOffEnabled,
                 onCheckedChange = { checked ->
@@ -162,6 +149,27 @@ private fun SettingsScreen(
             )
             Text(stringResource(R.string.plugin_settings))
         }
+
+        OutlinedButton(
+            onClick = {
+                context.startActivity(
+                    Intent(context, GptSettingsActivity::class.java)
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Settings,
+                contentDescription = "GPT settings",
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            Text("GPT настройки")
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
 
         Spacer(modifier = Modifier.height(8.dp))
 

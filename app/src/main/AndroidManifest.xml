@@ -54,6 +54,7 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
+        <activity android:name=".GptSettingsActivity" />
 
         <activity
             android:name=".PluginSettingsActivity"

@@ -62,6 +62,18 @@ sealed class ScenarioStep {
     data class SendTableToBus(
         val fileName: String
     ) : ScenarioStep()
+
+    data class GenerateWialonTable(
+        val fileName: String
+    ) : ScenarioStep()
+
+    // NEW: выполнение команды Linux (Android shell)
+    data class Shell(
+        val command: String,
+        val asRoot: Boolean = false,
+        val timeoutMs: Long = 12_000L
+    ) : ScenarioStep()
+
 }
 
 object ScenarioParser {
@@ -153,6 +165,20 @@ object ScenarioParser {
                         steps += ScenarioStep.KillAppRoot(pkg)
                     } else {
                         Log.w("TracScript", "Пустой аргумент в KILL_APP_ROOT на строке $idx")
+                    }
+                }
+
+
+                "SHELL_ROOT" -> {
+                    val sa = parseShellArgs(arg)
+                    if (sa == null || sa.command.isBlank()) {
+                        Log.w("TracScript", "Пустой аргумент в SHELL_ROOT на строке $idx")
+                    } else {
+                        steps += ScenarioStep.Shell(
+                            command = sa.command,
+                            asRoot = true,
+                            timeoutMs = sa.timeoutMs
+                        )
                     }
                 }
 
@@ -388,6 +414,29 @@ object ScenarioParser {
                     }
                 }
 
+                "GENERATE_WIALON_TABLE" -> {
+                    val parts = arg.split(' ')
+                        .filter { it.isNotBlank() }
+
+                    val argsMap = mutableMapOf<String, String>()
+                    for (p in parts) {
+                        val k = p.substringBefore('=', "")
+                        val v = p.substringAfter('=', "")
+                        if (k.isNotEmpty() && v.isNotEmpty()) {
+                            argsMap[k.lowercase()] = v
+                        }
+                    }
+
+                    val fileName = argsMap["file"]
+                        ?: arg.takeIf { it.isNotBlank() } // позволяем короткий формат: GENERATE_WIALON_TABLE my.json
+                    if (fileName.isNullOrEmpty()) {
+                        Log.w("TracScript", "GENERATE_WIALON_TABLE без file= на строке $idx")
+                    } else {
+                        steps += ScenarioStep.GenerateWialonTable(fileName)
+                    }
+                }
+
+
                 else -> {
                     Log.w("TracScript", "Неизвестная команда '$cmd' на строке $idx")
                 }
@@ -396,5 +445,53 @@ object ScenarioParser {
 
         return steps
     }
+
+    private fun unquote(s: String): String {
+        val t = s.trim()
+        return when {
+            t.length >= 2 && t.first() == '"' && t.last() == '"' -> t.substring(1, t.length - 1)
+            t.length >= 2 && t.first() == '\'' && t.last() == '\'' -> t.substring(1, t.length - 1)
+            else -> t
+        }
+    }
+
+    private data class ShellArgs(
+        val command: String,
+        val timeoutMs: Long
+    )
+
+    private fun parseShellArgs(arg: String, defaultTimeoutMs: Long = 12_000L): ShellArgs? {
+        val a = arg.trim()
+        if (a.isEmpty()) return null
+
+        // Вариант 1: key=value формат (cmd=... timeout=...)
+        // Пример: timeout=20000 cmd="ls -la /sdcard"
+        val looksLikeKv = a.contains("cmd=", ignoreCase = true) || a.contains("timeout=", ignoreCase = true)
+        if (looksLikeKv) {
+            val parts = a.split(Regex("\\s+")).filter { it.isNotBlank() }
+            var cmd: String? = null
+            var timeout: Long = defaultTimeoutMs
+
+            for (p in parts) {
+                when {
+                    p.startsWith("timeout=", ignoreCase = true) -> {
+                        timeout = p.substringAfter("=", "").trim().toLongOrNull() ?: defaultTimeoutMs
+                    }
+                    p.startsWith("cmd=", ignoreCase = true) -> {
+                        cmd = unquote(p.substringAfter("=", ""))
+                    }
+                }
+            }
+
+            // Если cmd= был с пробелами и его порезало (cmd="a b c"), выше всё равно ок,
+            // потому что cmd= должен быть в кавычках без пробелов в токене.
+            if (cmd.isNullOrBlank()) return null
+            return ShellArgs(command = cmd!!, timeoutMs = timeout.coerceAtLeast(100L))
+        }
+
+        // Вариант 2: просто "всё что после SHELL" — это команда (может быть в кавычках)
+        return ShellArgs(command = unquote(a), timeoutMs = defaultTimeoutMs)
+    }
+
 }
 

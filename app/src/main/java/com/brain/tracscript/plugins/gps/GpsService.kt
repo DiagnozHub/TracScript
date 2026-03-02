@@ -170,7 +170,10 @@ class GpsService : Service(), CoroutineScope {
         ensureWakeLock();
 
         val prefs =
-            applicationContext.getSharedPreferences(GpsPluginSettingsDefinition.PREFS, Context.MODE_PRIVATE)
+            applicationContext.getSharedPreferences(
+                GpsPluginSettingsDefinition.PREFS,
+                Context.MODE_PRIVATE
+            )
         val thr = prefs.getFloat(
             GpsPluginSettingsDefinition.KEY_MOTION_THRESHOLD,
             GpsPluginSettingsDefinition.DEFAULT_MOTION_THRESHOLD
@@ -186,7 +189,10 @@ class GpsService : Service(), CoroutineScope {
         motionCfgJob?.cancel()
         motionCfgJob = launch {
             val prefs =
-                applicationContext.getSharedPreferences(GpsPluginSettingsDefinition.PREFS, Context.MODE_PRIVATE)
+                applicationContext.getSharedPreferences(
+                    GpsPluginSettingsDefinition.PREFS,
+                    Context.MODE_PRIVATE
+                )
 
             var lastThr = Float.NaN
             var lastConf = Float.NaN
@@ -277,7 +283,10 @@ class GpsService : Service(), CoroutineScope {
                                 try {
                                     telemetryRepo?.saveGpsPosition(position)
                                 } catch (e: Exception) {
-                                    logGps?.e(TAG, "Error saving GPS data to the database (without filter): ${e.message}")
+                                    logGps?.e(
+                                        TAG,
+                                        "Error saving GPS data to the database (without filter): ${e.message}"
+                                    )
                                 }
                             }
                             return
@@ -411,6 +420,8 @@ class GpsService : Service(), CoroutineScope {
 
         logGps?.i(TAG, "GPS worked started")
 
+        var lastNavTime = 0L
+
         while (isActive) {
 
             val now = System.currentTimeMillis()
@@ -452,7 +463,10 @@ class GpsService : Service(), CoroutineScope {
 
                 // --- ПРОВЕРКА ДОСТУПНОСТИ ИНТЕРНЕТА ---
                 if (!NetworkState.isInternetAvailable(applicationContext)) {
-                    logGps?.w(TAG, "No internet connection — skipping sending, buffering location points")
+                    logGps?.w(
+                        TAG,
+                        "No internet connection — skipping sending, buffering location points"
+                    )
                     delay(10_000L)
                     continue
                 }
@@ -475,12 +489,20 @@ class GpsService : Service(), CoroutineScope {
                     val bestGps = repo.findBestGpsForTime(core.eventTimeMillis, 120_000L)
                     val dyn = bestGps?.let { repo.getGpsPositionParams(it.id) } ?: emptyList()
 
+                    // Кандидат времени для NAV: монотонно, но lastNavTime обновим ТОЛЬКО после успеха
+                    val base = bestGps?.time?.time ?: core.eventTimeMillis
+                    val navTimeCandidate = maxOf(base, lastNavTime + 1000L)
+                    val gpsForNav = bestGps?.copy(time = java.util.Date(navTimeCandidate))
+
                     try {
                         protocolSender!!.sendCoreEvent(
                             core = core,
-                            bestGps = bestGps,
+                            bestGps = gpsForNav,
                             params = dyn
                         )
+
+                        // Фиксируем "занятое" время только после успешной отправки
+                        lastNavTime = navTimeCandidate
 
                         logGps?.i(TAG, "CORE sent OK id=${core.id} gpsId=${bestGps?.id}")
 
@@ -499,10 +521,18 @@ class GpsService : Service(), CoroutineScope {
                     } catch (e: Exception) {
 
                         if (isTransientNetworkError(e)) {
-                            logGps?.e(TAG, "CORE send FAILED (network, keep queued) id=${core.id} err=${e.message}", e)
+                            logGps?.e(
+                                TAG,
+                                "CORE send FAILED (network, keep queued) id=${core.id} err=${e.message}",
+                                e
+                            )
                             delay(30_000L)
                         } else {
-                            logGps?.e(TAG, "CORE send FAILED (skip permanent) id=${core.id} err=${e.message}", e)
+                            logGps?.e(
+                                TAG,
+                                "CORE send FAILED (skip permanent) id=${core.id} err=${e.message}",
+                                e
+                            )
                             repo.markCoreEventSent(core.id)
                             delay(5_000L)
                         }
@@ -522,7 +552,10 @@ class GpsService : Service(), CoroutineScope {
                             params = dyn
                         )
 
-                        logGps?.i(TAG, "GPS sent OK id=${gps.id} lat=${gps.latitude} lon=${gps.longitude}")
+                        logGps?.i(
+                            TAG,
+                            "GPS sent OK id=${gps.id} lat=${gps.latitude} lon=${gps.longitude}"
+                        )
 
                         // успех -> помечаем
                         repo.markGpsPositionSent(gps.id)
@@ -536,11 +569,19 @@ class GpsService : Service(), CoroutineScope {
 
                         if (isTransientNetworkError(e)) {
                             // СЕТЬ/ТАЙМАУТ -> НЕ помечаем sent, иначе потеряешь точку
-                            logGps?.e(TAG, "GPS send FAILED (network, keep queued) id=${gps.id} err=${e.message}", e)
+                            logGps?.e(
+                                TAG,
+                                "GPS send FAILED (network, keep queued) id=${gps.id} err=${e.message}",
+                                e
+                            )
                             delay(10_000L)
                         } else {
                             // НЕ сеть -> считаем перманентным, чтобы очередь не клинила
-                            logGps?.e(TAG, "GPS send FAILED (skip permanent) id=${gps.id} err=${e.message}", e)
+                            logGps?.e(
+                                TAG,
+                                "GPS send FAILED (skip permanent) id=${gps.id} err=${e.message}",
+                                e
+                            )
                             repo.markGpsPositionSent(gps.id)
                             delay(5_000L)
                         }
@@ -548,7 +589,6 @@ class GpsService : Service(), CoroutineScope {
 
                     continue
                 }
-
 
 
                 // 3. В БД вообще нет точек — при необходимости добавим heartbeat в БД

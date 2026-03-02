@@ -1,4 +1,4 @@
-package com.brain.tracscript.plugins.gps
+package com.brain.tracscript.plugins.scenario.preprocessor
 
 object RussianTransliterator {
 

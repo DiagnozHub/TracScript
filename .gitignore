@@ -14,3 +14,5 @@
 .cxx
 local.properties
 /External
+/app/src/main/assets/tables
+/app/release

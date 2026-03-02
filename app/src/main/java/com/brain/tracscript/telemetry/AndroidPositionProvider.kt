@@ -5,11 +5,9 @@ import android.content.Context
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
-import android.location.GnssStatus
+import android.os.Build
 import android.os.Bundle
-import android.os.Handler
 import android.os.HandlerThread
-import android.os.Looper
 import android.util.Log
 
 class AndroidPositionProvider(
@@ -51,6 +49,7 @@ class AndroidPositionProvider(
     }
 
 
+    /*
     private val gnssCallback = object : GnssStatus.Callback() {
         override fun onSatelliteStatusChanged(status: GnssStatus) {
             var used = 0
@@ -65,8 +64,11 @@ class AndroidPositionProvider(
             )
         }
     }
+    */
 
-    fun getGnssHealth(): GnssHealth = nmeaMonitor.snapshot()
+    private var gnssFacade: GnssFacade? = null
+
+    //fun getGnssHealth(): GnssHealth = nmeaMonitor.snapshot()
 
     // аккуратная установка satellites в extras Location
     private fun injectSatellites(location: Location) {
@@ -78,107 +80,92 @@ class AndroidPositionProvider(
 
     @SuppressLint("MissingPermission")
     override fun startUpdates() {
+        // 0) если перезапуск — прибери старые подписки, чтобы не плодить listeners
+        try { gnssFacade?.unregister() } catch (_: Exception) {}
+        gnssFacade = null
+
         try {
+            // 1) NMEA (теперь у тебя в NmeaMonitor есть legacy-ветка, значит можно и на API 23)
             try {
                 nmeaMonitor.start()
+            } catch (se: SecurityException) {
+                RawNmeaBus.publishError(se)
+                Log.w("AndroidPositionProvider", "NMEA start blocked (no permission)", se)
             } catch (e: Exception) {
                 RawNmeaBus.publishError(e)
                 Log.w("AndroidPositionProvider", "NMEA start failed", e)
             }
 
-            // Пытаемся подписаться на GNSS-статус (для GPS-спутников)
+            // 2) SATS: API 24+ -> GnssStatus, API 23 -> GpsStatus
             try {
-                locationManager.registerGnssStatusCallback(
-                    gnssCallback,
-                    Handler(Looper.getMainLooper())
-                )
+                gnssFacade =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        GnssFacadeN(locationManager) { used, total ->
+                            lastSatellitesUsedInFix = used
+                            Log.d("AndroidPositionProvider", "GNSS status: total=$total, usedInFix=$used")
+                        }
+                    } else {
+                        GpsStatusFacadeLegacy(locationManager) { used, total ->
+                            lastSatellitesUsedInFix = used
+                            Log.d("AndroidPositionProvider", "GPS status: total=$total, usedInFix=$used")
+                        }
+                    }
+
+                gnssFacade?.register()
+            } catch (se: SecurityException) {
+                Log.w("AndroidPositionProvider", "Sat facade register blocked (no permission)", se)
             } catch (e: Exception) {
-                Log.w("AndroidPositionProvider", "registerGnssStatusCallback failed", e)
+                Log.w("AndroidPositionProvider", "Sat facade register failed", e)
             }
 
+            // 3) Location updates
             val minInterval = if (distance > 0 || angle > 0) MINIMUM_INTERVAL else interval
             Log.i(
                 "AndroidPositionProvider",
                 "startUpdates: provider=$provider interval=$minInterval dist=$distance angle=$angle"
             )
 
-            locationManager.requestLocationUpdates(
-                provider,
-                minInterval,
-                0f,
-                this,
-                looper
-            )
-        } catch (e: RuntimeException) {
-            listener.onPositionError(e)
+            try {
+                locationManager.requestLocationUpdates(
+                    provider,
+                    minInterval,
+                    0f,
+                    this,
+                    looper
+                )
+            } catch (se: SecurityException) {
+                // разрешения нет/отозвали — сообщаем наверх
+                listener.onPositionError(se)
+            }
+
+        } catch (re: RuntimeException) {
+            listener.onPositionError(re)
         }
     }
 
     override fun stopUpdates() {
-        // Сначала отписываемся от GNSS
+        // Останавливаем NMEA
         try {
             nmeaMonitor.stop()
-
-            locationManager.unregisterGnssStatusCallback(gnssCallback)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("AndroidPositionProvider", "NMEA stop failed", e)
         }
 
-        locationManager.removeUpdates(this)
-    }
-
-    /*
-    @Suppress("MissingPermission")
-    override fun requestSingleLocation() {
+        // Отписываемся от GNSS (только если был создан на API 24+)
         try {
-            val location = locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
-            if (location != null) {
-                // подмешиваем количество спутников
-                injectSatellites(location)
+            gnssFacade?.unregister()
+        } catch (e: Exception) {
+            Log.w("AndroidPositionProvider", "GNSS unregister failed", e)
+        }
+        gnssFacade = null
 
-                // одиночный запрос — отдаём сразу, без фильтра по интервалу/дистанции/углу
-                listener.onPositionUpdate(
-                    Position(
-                        deviceId = deviceId,
-                        location = location,
-                        battery =  BatteryUtils.read(context)
-                    )
-                )
-            } else {
-                locationManager.requestSingleUpdate(
-                    provider,
-                    object : LocationListener {
-                        override fun onLocationChanged(location: Location) {
-                            // тоже подмешиваем спутники
-                            injectSatellites(location)
-
-                            listener.onPositionUpdate(
-                                Position(
-                                    deviceId = deviceId,
-                                    location = location,
-                                    battery =  BatteryUtils.read(context)
-                                )
-                            )
-                        }
-
-                        @Deprecated("Deprecated in Java")
-                        override fun onStatusChanged(
-                            provider: String,
-                            status: Int,
-                            extras: Bundle
-                        ) {
-                        }
-
-                        override fun onProviderEnabled(provider: String) {}
-                        override fun onProviderDisabled(provider: String) {}
-                    },
-                    Looper.getMainLooper()
-                )
-            }
-        } catch (e: RuntimeException) {
-            listener.onPositionError(e)
+        // Отписываемся от Location updates
+        try {
+            locationManager.removeUpdates(this)
+        } catch (e: Exception) {
+            Log.w("AndroidPositionProvider", "removeUpdates failed", e)
         }
     }
-    */
 
     override fun onLocationChanged(location: Location) {
         // сюда приходят регулярные обновления — тоже подмешиваем satellites

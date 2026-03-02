@@ -6,20 +6,23 @@ import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.GestureDescription
-import android.content.Context
 import android.content.SharedPreferences
 import com.brain.tracscript.FileHelper
 import com.brain.tracscript.R
 import com.brain.tracscript.ScreenOnController
+import com.brain.tracscript.core.BusEvents
 import com.brain.tracscript.core.TracScriptApp
 import com.brain.tracscript.core.DataBus
 import com.brain.tracscript.core.DataBusEvent
-import com.brain.tracscript.plugins.gps.TableJsonExtractor
+import com.brain.tracscript.plugins.scenario.preprocessor.ScenarioWialonPreprocessor
+import com.brain.tracscript.plugins.scenario.preprocessor.TableJsonExtractor
 import com.brain.tracscript.telemetry.AppLog
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 const val TARGET_PACKAGE = "android"
@@ -62,10 +65,10 @@ class MyAccessibilityService : AccessibilityService() {
         private const val WAIT_TEXT_INTERVAL_MS = 300L
         private const val MAX_FIND_BEST_CHECKS = 5000
         private var exploreMode = false
-
-        private val serviceJob = SupervisorJob()
-        private val serviceScope = CoroutineScope(serviceJob + Dispatchers.Main)
     }
+
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(serviceJob + Dispatchers.Main)
 
     // хэндлер на главном потоке для задержек и ожиданий
     private val waitHandler = Handler(Looper.getMainLooper())
@@ -83,6 +86,8 @@ class MyAccessibilityService : AccessibilityService() {
     private var busSub: com.brain.tracscript.core.Subscription? = null
 
     private var logScenario: AppLog? = null
+
+    private var gptClient: com.brain.tracscript.GptClient? = null
 
 
     private fun bus(): DataBus =
@@ -133,6 +138,14 @@ class MyAccessibilityService : AccessibilityService() {
 
         logScenario?.i(TAG, "Scenario engine START")
 
+        gptClient = com.brain.tracscript.GptClient(applicationContext) { level, tag, message, tr ->
+            when (level) {
+                "I" -> logScenario?.i(TAG, "[$tag] $message")
+                "W" -> logScenario?.w(TAG, "[$tag] $message")
+                "E" -> if (tr != null) logScenario?.e(TAG, "[$tag] $message", tr)
+                else logScenario?.e(TAG, "[$tag] $message", null)
+            }
+        }
 
         // --- Target controller ---
         targetController = TargetAppController(
@@ -215,6 +228,8 @@ class MyAccessibilityService : AccessibilityService() {
         logScenario?.i(TAG, "Scenario engine STOP")
         logScenario?.close()
         logScenario = null
+
+        gptClient = null
     }
 
     private fun enableExploreMode() {
@@ -821,6 +836,41 @@ class MyAccessibilityService : AccessibilityService() {
                 }
             }
 
+            is ScenarioStep.Shell -> {
+
+                if (!step.asRoot) {
+                    setDebug("SHELL denied: root-only build")
+                    runLater(100L) { runScenarioSteps(steps, index + 1, runId) }
+                    return
+                }
+
+                setDebug("SHELL_ROOT ${step.command.take(60)}")
+
+                serviceScope.launch {
+                    val result = targetController.execRootCommand(
+                        command = step.command,
+                        timeoutMs = step.timeoutMs
+                    )
+
+                    if (!scenarioManager.isRunActive(runId)) return@launch
+
+                    logScenario?.i(TAG, "ROOT CMD: ${step.command}")
+                    logScenario?.i(TAG, "exit=${result.exitCode}")
+                    if (result.stdout.isNotBlank())
+                        logScenario?.i(TAG, "stdout:\n${result.stdout}")
+                    if (result.stderr.isNotBlank())
+                        logScenario?.w(TAG, "stderr:\n${result.stderr}")
+
+                    setDebug("ROOT exit=${result.exitCode}")
+
+                    runLater(100L) {
+                        runScenarioSteps(steps, index + 1, runId)
+                    }
+                }
+
+                return
+            }
+
 
             is ScenarioStep.ExtractTableById -> {
                 val msg = applicationContext.getString(R.string.scenario_step_extract_table_by_id, index, step.viewId, step.fileName)
@@ -855,38 +905,49 @@ class MyAccessibilityService : AccessibilityService() {
 
             is ScenarioStep.SendTableToBus -> {
                 val fileName = step.fileName
+                setDebug(applicationContext.getString(R.string.scenario_step_send_table_to_bus, index, fileName))
 
-                var msg = applicationContext.getString(R.string.scenario_step_send_table_to_bus, index, fileName)
-                //logScenario?.i(TAG, msg)
-                setDebug(msg)
-
-                val json = fileHelper.readTextFromDocuments(fileName)
-                if (json == null) {
-                    msg = applicationContext.getString(R.string.send_table_file_not_found_or_empty, fileName)
-                    //logScenario?.w(TAG, msg)
-                    setDebug(msg)
-                    runLater(100L) {
-                        runScenarioSteps(steps, index + 1, runId)
-                    }
+                val rawJson = fileHelper.readTextFromDocuments(fileName)
+                if (rawJson.isNullOrBlank()) {
+                    setDebug(applicationContext.getString(R.string.send_table_file_not_found_or_empty, fileName))
+                    runLater(100L) { runScenarioSteps(steps, index + 1, runId) }
                     return
                 }
 
-                // Кладём в шину то же самое, что потом читает SEND_WIALON_TABLE
-                val event = DataBusEvent(
-                    type = "wialon_table_json",
-                    payload = mapOf(
-                        "fileName" to fileName,
-                        "json" to json
-                    )
-                )
-                bus().post(event)
+                val gpt = gptClient // заранее созданный в startEngine()
 
-                logScenario?.i(TAG, applicationContext.getString(R.string.send_table_event_sent))
+                serviceScope.launch(Dispatchers.IO) {
+                    val preparedJson = try {
+                        ScenarioWialonPreprocessor.buildPreparedRowsJson(rawJson)
+                    } catch (_: Exception) {
+                        rawJson
+                    }
 
-                runLater(100L) {
-                    runScenarioSteps(steps, index + 1, runId)
+                    val finalJson = try {
+                        if (gpt != null) WialonErrEnricher.enrichErrToBase64IfPossible(preparedJson, gpt)
+                        else preparedJson
+                    } catch (_: Exception) {
+                        preparedJson
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        if (!scenarioManager.isRunActive(runId)) return@withContext
+
+                        bus().post(
+                            DataBusEvent(
+                                type = BusEvents.WIALON_TABLE_JSON_EVENT,
+                                payload = mapOf("fileName" to fileName, "json" to finalJson)
+                            )
+                        )
+
+                        logScenario?.i(TAG, applicationContext.getString(R.string.send_table_event_sent))
+                        runLater(100L) { runScenarioSteps(steps, index + 1, runId) }
+                    }
                 }
+                return
             }
+
+
 
             is ScenarioStep.DeleteFile -> {
                 val msg = applicationContext.getString(R.string.scenario_step_delete_file, index, step.fileName)
@@ -1000,6 +1061,25 @@ class MyAccessibilityService : AccessibilityService() {
                     runScenarioSteps(steps, index + 1, runId)
                 }
             }
+
+            is ScenarioStep.GenerateWialonTable -> {
+                val fileName = step.fileName
+                val msg = "Step[$index]: GENERATE_WIALON_TABLE $fileName"
+                setDebug(msg)
+
+                val ok = fileHelper.generateWialonTableToDocuments(step.fileName)
+
+                if (!ok) {
+                    setDebug("GENERATE_WIALON_TABLE failed: $fileName")
+                } else {
+                    setDebug("Generated: $fileName")
+                }
+
+                runLater(100L) {
+                    runScenarioSteps(steps, index + 1, runId)
+                }
+            }
+
 
         }
     }

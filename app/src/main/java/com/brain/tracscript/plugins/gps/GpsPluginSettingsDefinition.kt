@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.brain.tracscript.R
+import com.brain.tracscript.core.BusEvents
 import com.brain.tracscript.core.DataBusEvent
 import com.brain.tracscript.core.PluginSettingsDefinition
 import com.brain.tracscript.core.TracScriptApp
@@ -70,7 +71,6 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
     const val KEY_PORT = "port"
     const val KEY_IMEI = "imei"
     const val KEY_PASSWORD = "password"
-    const val PLUGIN_ENABLED_CHANGED_EVENT = "plugin_enabled_changed"
     const val PLUGIN_ID = "pluginId"
 
     const val KEY_GPS_INTERVAL_SEC = "gps_interval_sec"
@@ -290,7 +290,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
             bus.post(
                 DataBusEvent(
-                    type = PLUGIN_ENABLED_CHANGED_EVENT,
+                    type = BusEvents.PLUGIN_ENABLED_CHANGED_EVENT,
                     payload = mapOf(
                         PLUGIN_ID to id,
                         KEY_ENABLED to isEnabled

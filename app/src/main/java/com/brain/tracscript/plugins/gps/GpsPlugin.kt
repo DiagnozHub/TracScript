@@ -1,6 +1,7 @@
 package com.brain.tracscript.plugins.gps
 
 import android.content.Context
+import com.brain.tracscript.core.BusEvents
 import com.brain.tracscript.core.DataBusEvent
 import com.brain.tracscript.core.Plugin
 import com.brain.tracscript.core.PluginContext
@@ -22,12 +23,22 @@ fun loadGpsConfig(appContext: Context): GpsConfig {
     val imei = prefs.getString(GPSWialonSettings.KEY_IMEI, "") ?: ""
     val password = prefs.getString(GPSWialonSettings.KEY_PASSWORD, "NA") ?: "NA"
 
-    val gpsIntervalSec = prefs.getInt(GPSWialonSettings.KEY_GPS_INTERVAL_SEC, GPSWialonSettings.DEFAULT_GPS_INTERVAL_SEC)
-    val gpsMinDistanceM = prefs.getFloat(GPSWialonSettings.KEY_GPS_MIN_DISTANCE_M, GPSWialonSettings.DEFAULT_GPS_MIN_DISTANCE_M)
-    val gpsMinAngleDeg = prefs.getFloat(GPSWialonSettings.KEY_GPS_MIN_ANGLE_DEG, GPSWialonSettings.DEFAULT_GPS_MIN_ANGLE_DEG)
+    val gpsIntervalSec = prefs.getInt(
+        GPSWialonSettings.KEY_GPS_INTERVAL_SEC,
+        GPSWialonSettings.DEFAULT_GPS_INTERVAL_SEC
+    )
+    val gpsMinDistanceM = prefs.getFloat(
+        GPSWialonSettings.KEY_GPS_MIN_DISTANCE_M,
+        GPSWialonSettings.DEFAULT_GPS_MIN_DISTANCE_M
+    )
+    val gpsMinAngleDeg = prefs.getFloat(
+        GPSWialonSettings.KEY_GPS_MIN_ANGLE_DEG,
+        GPSWialonSettings.DEFAULT_GPS_MIN_ANGLE_DEG
+    )
 
     val protocol = GpsProtocolType.valueOf(
-        prefs.getString(GPSWialonSettings.KEY_PROTOCOL, GPSWialonSettings.DEFAULT_PROTOCOL.name) ?: GPSWialonSettings.DEFAULT_PROTOCOL.name
+        prefs.getString(GPSWialonSettings.KEY_PROTOCOL, GPSWialonSettings.DEFAULT_PROTOCOL.name)
+            ?: GPSWialonSettings.DEFAULT_PROTOCOL.name
     )
 
 
@@ -55,7 +66,7 @@ class GpsSendBlockedException(
     cause: Throwable? = null
 ) : RuntimeException(message, cause)
 
-class GpsPlugin (private val appCtx: Context) : Plugin {
+class GpsPlugin(private val appCtx: Context) : Plugin {
 
     override val id: String = GpsPluginKey.ID
     override val displayName: String = "GPS plugin"
@@ -91,7 +102,8 @@ class GpsPlugin (private val appCtx: Context) : Plugin {
     }
 
     private fun applyEnabledFromPrefs(context: PluginContext) {
-        val prefs = context.appContext.getSharedPreferences( GPSWialonSettings.PREFS, Context.MODE_PRIVATE)
+        val prefs =
+            context.appContext.getSharedPreferences(GPSWialonSettings.PREFS, Context.MODE_PRIVATE)
         val enabled = prefs.getBoolean(GPSWialonSettings.KEY_ENABLED, false)
 
         context.log(id, "applyEnabledFromPrefs: enabled=$enabled")
@@ -126,7 +138,7 @@ class GpsPlugin (private val appCtx: Context) : Plugin {
 
         when (event.type) {
 
-            GPSWialonSettings.PLUGIN_ENABLED_CHANGED_EVENT -> {
+            BusEvents.PLUGIN_ENABLED_CHANGED_EVENT -> {
                 val pid = event.payload[GPSWialonSettings.PLUGIN_ID] as? String ?: return
                 if (pid != id) return
 
@@ -141,7 +153,7 @@ class GpsPlugin (private val appCtx: Context) : Plugin {
                 }
             }
 
-            "wialon_table_json" -> {
+            BusEvents.WIALON_TABLE_JSON_EVENT -> {
                 val ctx = context ?: return
                 val repo = telemetryRepo ?: return
 
@@ -150,12 +162,15 @@ class GpsPlugin (private val appCtx: Context) : Plugin {
                     return
                 }
 
-                val json = event.payload["json"] as? String ?: return
+                val json = event.payload["json"] as? String ?: run {
+                    ctx.log(id, "wialon_table_json: payload['json'] отсутствует или не String")
+                    return
+                }
                 val fileName = event.payload["fileName"] as? String
 
                 ctx.log(
                     id,
-                    "Получено событие ядра для Wialon: ${fileName ?: "<?>"} (len=${json.length}) ts=${event.timestamp}"
+                    "Получено событие ядра для Wialon (prepared): ${fileName ?: "<?>"} (len=${json.length}) ts=${event.timestamp}"
                 )
 
                 pluginScope.launch {
@@ -166,6 +181,7 @@ class GpsPlugin (private val appCtx: Context) : Plugin {
                     )
                 }
             }
+
         }
     }
 }

@@ -220,4 +220,29 @@ class FileHelper(
         }
     }
 
+    fun copyAssetToDocuments(assetRelativePath: String, outFileName: String): Boolean {
+        return try {
+            val bytes = context.assets.open(assetRelativePath).use { it.readBytes() }
+            if (bytes.isEmpty()) {
+                Log.w(TAG, "copyAssetToDocuments: asset empty: $assetRelativePath")
+                return false
+            }
+
+            val text = bytes.toString(Charsets.UTF_8)
+            saveJsonFile(outFileName, text)
+            Log.d(TAG, "copyAssetToDocuments: copied $assetRelativePath -> $outFileName")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "copyAssetToDocuments error: $assetRelativePath -> $outFileName", e)
+            false
+        }
+    }
+
+    fun generateWialonTableToDocuments(fileName: String): Boolean {
+        // по твоей договоренности файлы лежат тут:
+        val assetPath = "tables/$fileName"
+        return copyAssetToDocuments(assetPath, fileName)
+    }
+
+
 }

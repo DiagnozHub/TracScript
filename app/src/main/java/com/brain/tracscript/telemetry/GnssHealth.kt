@@ -55,6 +55,7 @@ class NmeaMonitor(
     private val lastUiPushAtElapsed = AtomicLong(0L)
     private val UI_PUSH_INTERVAL_MS = 1000L
 
+    /*
     fun start() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
             Log.w("NmeaMonitor", "NMEA requires API 24+")
@@ -88,6 +89,63 @@ class NmeaMonitor(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
         val l = listener as? android.location.OnNmeaMessageListener ?: return
         try { lm.removeNmeaListener(l) } catch (_: Exception) {}
+        listener = null
+    }
+    */
+
+    @Suppress("DEPRECATION")
+    fun start() {
+        if (listener != null) return
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                val l = android.location.OnNmeaMessageListener { message, _ ->
+                    try {
+                        onNmea(message)
+                    } catch (e: Exception) {
+                        Log.w("NmeaMonitor", "onNmea failed", e)
+                        runCatching { pushUiThrottled(snapshot().lastSentence) }
+                    }
+                }
+                listener = l
+                lm.addNmeaListener(l, handler)
+                Log.d("NmeaMonitor", "NMEA listener registered (API24+)")
+            } else {
+                val l = android.location.GpsStatus.NmeaListener { _, message ->
+                    try {
+                        onNmea(message)
+                    } catch (e: Exception) {
+                        Log.w("NmeaMonitor", "onNmea failed (legacy)", e)
+                        runCatching { pushUiThrottled(snapshot().lastSentence) }
+                    }
+                }
+                listener = l
+                lm.addNmeaListener(l) // legacy API
+                Log.d("NmeaMonitor", "NMEA listener registered (legacy)")
+            }
+        } catch (se: SecurityException) {
+            // нет разрешения на геолокацию — NMEA не стартуем
+            Log.w("NmeaMonitor", "No permission for NMEA", se)
+            listener = null
+            throw se // или НЕ throw, если хочешь молча жить без NMEA
+        } catch (e: Exception) {
+            Log.w("NmeaMonitor", "addNmeaListener failed", e)
+            listener = null
+            throw e
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    fun stop() {
+        val l = listener ?: return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                (l as? android.location.OnNmeaMessageListener)?.let { lm.removeNmeaListener(it) }
+            } else {
+                (l as? android.location.GpsStatus.NmeaListener)?.let { lm.removeNmeaListener(it) }
+            }
+        } catch (_: Exception) {
+        }
         listener = null
     }
 

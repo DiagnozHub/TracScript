@@ -7,6 +7,19 @@ data class DataBusEvent(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+object BusEvents {
+    // types
+    const val WIALON_TABLE_JSON_EVENT = "wialon_table_json"
+    const val PLUGIN_ENABLED_CHANGED_EVENT = "plugin_enabled_changed"
+
+    // payload keys (общие)
+    //const val KEY_JSON = "json"
+    //const val KEY_FILE_NAME = "fileName"
+
+    //const val KEY_PLUGIN_ID = "pluginId"
+    //const val KEY_ENABLED = "enabled"
+}
+
 // Подписка (нужно, чтобы уметь отписаться)
 interface Subscription {
     fun unsubscribe()
