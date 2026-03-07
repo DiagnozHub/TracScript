@@ -168,10 +168,12 @@ class AndroidPositionProvider(
     }
 
     override fun onLocationChanged(location: Location) {
-        // сюда приходят регулярные обновления — тоже подмешиваем satellites
-        injectSatellites(location)
 
-        // дальше всё как раньше: фильтрация по интервалу/дистанции/углу в базовом классе
+        if (location.provider != LocationManager.GPS_PROVIDER) return
+
+        if (location.accuracy <= 0f || location.accuracy > 50f) return
+
+        injectSatellites(location)
         processLocation(location)
     }
 

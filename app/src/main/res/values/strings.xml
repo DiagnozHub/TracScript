@@ -64,8 +64,9 @@
     \nlon: %2$s
     \nSatellites: %3$s
     \nTime: %4$s
-    \nAccuracy: %5$s m
-    \nSpeed: %6$s km/h
+    \nFixTime: %5$s
+    \nAccuracy: %6$s m
+    \nSpeed: %7$s km/h
     </string>
     <string name="nmea_raw_data">NMEA (raw data from GPS receiver)</string>
     <string name="nmea_error_with_details">

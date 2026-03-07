@@ -351,6 +351,15 @@ class GpsStreamFilter(
         return out
     }
 
+    /*
+    private fun send(p: Position, nowRt: Long): Position {
+        val out = p // time уже выставлен в Position-конструкторе
+        lastSent = out
+        lastSentRt = nowRt
+        return out
+    }
+    */
+
     private fun calcWallTime(nowRt: Long): Long {
         return if (lastGoodWallTimeMs != 0L) {
             lastGoodWallTimeMs + (nowRt - lastGoodRt)

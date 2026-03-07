@@ -63,8 +63,9 @@
     \nlon: %2$s
     \nСпутники: %3$s
     \nВремя: %4$s
-    \nТочность: %5$s m
-    \nСкорость: %6$s km/h
+    \nВремя фиксации: %5$s
+    \nТочность: %6$s m
+    \nСкорость: %7$s km/h
     </string>
     <string name="nmea_raw_data">NMEA (сырые данные с приемника GPS)</string>
     <string name="nmea_error_with_details">

@@ -1,6 +1,7 @@
 package com.brain.tracscript.plugins.scenario
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -61,9 +62,8 @@ class MyAccessibilityService : AccessibilityService() {
         private const val TAG = "TracScript"
 
 
-        private const val WAIT_TEXT_TIMEOUT_MS = 5000L
+        private const val WAIT_TEXT_TIMEOUT_MS = 10000L
         private const val WAIT_TEXT_INTERVAL_MS = 300L
-        private const val MAX_FIND_BEST_CHECKS = 5000
         private var exploreMode = false
     }
 
@@ -88,6 +88,8 @@ class MyAccessibilityService : AccessibilityService() {
     private var logScenario: AppLog? = null
 
     private var gptClient: com.brain.tracscript.GptClient? = null
+
+    private lateinit var nodeFinder: AccessibilityNodeFinder
 
 
     private fun bus(): DataBus =
@@ -138,6 +140,13 @@ class MyAccessibilityService : AccessibilityService() {
 
         logScenario?.i(TAG, "Scenario engine START")
 
+        nodeFinder = AccessibilityNodeFinder(
+            service = this,
+            logI = { msg -> logScenario?.i(TAG, msg) },
+            logW = { msg -> logScenario?.w(TAG, msg) },
+            logE = { msg, tr -> logScenario?.e(TAG, msg, tr) }
+        )
+
         gptClient = com.brain.tracscript.GptClient(applicationContext) { level, tag, message, tr ->
             when (level) {
                 "I" -> logScenario?.i(TAG, "[$tag] $message")
@@ -152,7 +161,7 @@ class MyAccessibilityService : AccessibilityService() {
             service = this,
             initialTargetPackage = TARGET_PACKAGE,
             debug = { msg -> setDebug(msg) },
-            findNodeByTextExact = { root, text -> findNodeByTextExact(root, text) }
+            findNodeByTextExact = { root, text -> nodeFinder.findNodeByTextExact(root, text) }
         )
 
         // --- Overlay ---
@@ -264,45 +273,14 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun findNodeByIdLike(root: AccessibilityNodeInfo?, idQuery: String): AccessibilityNodeInfo? {
-        if (root == null) return null
+    fun inspectorFindNodeAt(x: Int, y: Int): AccessibilityNodeInfo? =
+        nodeFinder.findNodeAtPositionSmart(x, y)
 
-        val hasWildcard = idQuery.contains('*')
-        val pattern = if (hasWildcard) {
-            idQuery.replace("*", ".*").toRegex()
-        } else null
+    fun inspectorDumpTree(node: AccessibilityNodeInfo?): String =
+        nodeFinder.dumpFullTreeFrom(node)
 
-        fun matches(resId: String?): Boolean {
-            if (resId == null) return false
-            return if (hasWildcard) {
-                pattern!!.matches(resId)
-            } else {
-                resId == idQuery
-            }
-        }
-
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        val visited = HashSet<Int>()
-        queue.add(root)
-
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            val id = System.identityHashCode(node)
-            if (!visited.add(id)) continue
-
-            val resId = node.viewIdResourceName
-            if (matches(resId)) {
-                logScenario?.i(TAG, "findNodeByIdLike: found id=$resId, class=${node.className}")
-                return node
-            }
-
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { queue.add(it) }
-            }
-        }
-
-        return null
-    }
+    fun inspectorDumpWindows(x: Int, y: Int): String =
+        nodeFinder.dumpWindows(x, y)
 
     private fun buildExpandableListJson(listNode: AccessibilityNodeInfo, viewId: String): String {
         val rows = mutableListOf<RowDump>()
@@ -418,105 +396,6 @@ class MyAccessibilityService : AccessibilityService() {
             .replace("\n", "\\n")
             .replace("\r", "\\r")
 
-    fun findNodeAtPosition(root: AccessibilityNodeInfo?, x: Int, y: Int): AccessibilityNodeInfo? {
-        if (root == null) return null
-
-        val rect = android.graphics.Rect()
-        root.getBoundsInScreen(rect)
-
-        if (!rect.contains(x, y)) return null
-
-        for (i in 0 until root.childCount) {
-            val child = root.getChild(i)
-            val hit = findNodeAtPosition(child, x, y)
-            if (hit != null) return hit
-        }
-
-        return root
-    }
-
-    fun dumpFullTreeFrom(node: AccessibilityNodeInfo?): String {
-        if (node == null) return "node=null"
-
-        val sb = StringBuilder()
-
-        sb.appendLine("\n================= INSPECTOR =================")
-
-        // 1. Родители
-        sb.appendLine("\n--- PARENTS ---")
-        var p = node.parent
-        var level = 0
-        while (p != null && level < 20) {
-            sb.appendLine(describeNode("Parent[$level]", p))
-            p = p.parent
-            level++
-        }
-
-        // 2. Текущая нода
-        sb.appendLine("\n--- CURRENT NODE ---")
-        sb.appendLine(describeNode("Node", node))
-
-        // 3. Дети
-        sb.appendLine("\n--- CHILDREN ---")
-        for (i in 0 until node.childCount) {
-            sb.appendLine(describeNode("Child[$i]", node.getChild(i)))
-        }
-
-        // 4. Соседи (дети родителя)
-        sb.appendLine("\n--- SIBLINGS ---")
-        val parent = node.parent
-        if (parent != null) {
-            for (i in 0 until parent.childCount) {
-                sb.appendLine(describeNode("Sibling[$i]", parent.getChild(i)))
-            }
-        }
-
-        sb.appendLine("\n=============================================\n")
-
-        return sb.toString()
-    }
-
-    private fun describeNode(tag: String, n: AccessibilityNodeInfo?): String {
-        if (n == null) return "$tag: null"
-
-        val rect = android.graphics.Rect()
-        n.getBoundsInScreen(rect)
-
-        val text = n.text ?: n.contentDescription ?: ""
-
-        return "$tag: cls=${n.className}, txt='$text', id=${n.viewIdResourceName}, " +
-                "click=${n.isClickable}, childCount=${n.childCount}, bounds=$rect"
-    }
-
-    private fun findNodeByTextExact(root: AccessibilityNodeInfo?, text: String): AccessibilityNodeInfo? {
-        if (root == null) return null
-
-        val target = text.trim().lowercase()
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        val visited = HashSet<Int>()
-
-        queue.add(root)
-
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-
-            val id = System.identityHashCode(node)
-            if (!visited.add(id)) continue
-
-            val nodeText = (node.text ?: node.contentDescription)
-                ?.toString()
-                ?.trim()
-                ?.lowercase()
-
-            if (nodeText == target) return node
-
-            for (i in 0 until node.childCount) {
-                val child = node.getChild(i)
-                if (child != null) queue.add(child)
-            }
-        }
-        return null
-    }
 
     private fun collectVisibleRows(list: AccessibilityNodeInfo): List<RowInfo> {
         val out = mutableListOf<RowInfo>()
@@ -622,11 +501,19 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
 
-        registerPrefListener()
+        // ВАЖНО: без этого windows может быть пустым, а rootInActiveWindow = null
+        val info = serviceInfo
+        info.flags = info.flags or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
 
+        serviceInfo = info
+
+        registerPrefListener()
         syncEngineState()
 
-        logScenario?.i(TAG, "AccessibilityService connected")
+        logScenario?.i(TAG, "AccessibilityService connected, flags=${serviceInfo.flags}")
     }
 
     override fun onDestroy() {
@@ -1088,7 +975,7 @@ class MyAccessibilityService : AccessibilityService() {
     private fun extractExpandableList(resId: String, fileName: String) {
         try {
             val root = rootInActiveWindow ?: return setDebug("root null")
-            val listNode = findNodeByViewId(root, resId)
+            val listNode = nodeFinder.findNodeByViewId(root, resId)
                 ?: return setDebug(applicationContext.getString(R.string.expandable_list_not_found, resId))
 
             val result = mutableListOf<ExpandableGroup>()
@@ -1142,7 +1029,7 @@ class MyAccessibilityService : AccessibilityService() {
             setDebug(msg)
             //logScenario?.i(TAG, msg)
 
-            val tableNode = findNodeByIdLike(root, viewId)
+            val tableNode = nodeFinder.findNodeByIdLike(root, viewId)
             if (tableNode == null) {
                 val json = TableJsonExtractor.buildNoErrorsTableJson(
                     viewId = viewId,
@@ -1155,9 +1042,21 @@ class MyAccessibilityService : AccessibilityService() {
             }
 
             val json = buildExpandableListJson(tableNode, viewId)
-            fileHelper.saveJsonFile(fileName, json)
 
+            // если таблица есть, но это не список ошибок / нет полезных строк
+            val preparedRows = ScenarioWialonPreprocessor.buildRows(json)
+            if (preparedRows.isEmpty()) {
+                val noErrJson = TableJsonExtractor.buildNoErrorsTableJson(
+                    viewId = viewId,
+                    reason = "no_dtcs"
+                )
+                fileHelper.saveJsonFile(fileName, noErrJson)
+                return
+            }
+
+            fileHelper.saveJsonFile(fileName, json)
             setDebug(applicationContext.getString(R.string.table_saved, fileName))
+
         } catch (e: Exception) {
             logScenario?.e(TAG, "extractTableById error", e)
             setDebug(applicationContext.getString(R.string.extract_table_by_id_error))
@@ -1179,14 +1078,15 @@ class MyAccessibilityService : AccessibilityService() {
                 return
             }
 
-            val node = findBestNodeByText(root, text)
+            val node = nodeFinder.findBestNodeByText(root, text)
+
             if (node == null) {
                 //logScenario?.i(TAG, "Не найдено подходящих элементов с текстом '$text'")
                 setDebug(applicationContext.getString(R.string.element_with_text_not_found, text))
                 return
             }
 
-            val success = clickNodeOrParents(node)
+            val success = nodeFinder.clickNodeOrParents(node)
             //logScenario?.i(TAG, "Итог клика по '$text' -> $success")
             setDebug(
                 applicationContext.getString(
@@ -1202,103 +1102,6 @@ class MyAccessibilityService : AccessibilityService() {
             //logScenario?.e(TAG, "Ошибка в clickButtonWithText('$text')", e)
             setDebug(applicationContext.getString(R.string.click_text_error))
         }
-    }
-
-
-    private fun findBestNodeByText(root: AccessibilityNodeInfo?, text: String): AccessibilityNodeInfo? {
-        if (root == null) return null
-
-        val target = text.trim().lowercase()
-        val queue = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
-        val visited = HashSet<String>()
-        val matches = mutableListOf<Pair<AccessibilityNodeInfo, Int>>()
-
-        queue.add(root to 0)
-
-        var checks = 0
-
-        fun nodeId(n: AccessibilityNodeInfo): String =
-            "${n.windowId}:${System.identityHashCode(n)}"
-
-        while (queue.isNotEmpty()) {
-
-            if (++checks > MAX_FIND_BEST_CHECKS) {
-                logScenario?.e(TAG, "findBestNodeByText: HARD STOP, visited=$checks")
-                break
-            }
-
-            val (node, depth) = queue.removeFirst()
-
-            val id = nodeId(node)
-            if (!visited.add(id)) continue
-
-            val nodeText = (node.text ?: node.contentDescription)
-                ?.toString()
-                ?.trim()
-                ?.lowercase()
-
-            if (nodeText == target) {
-                matches.add(node to depth)
-            }
-
-            val count = node.childCount
-            for (i in 0 until count) {
-                node.getChild(i)?.let { child ->
-                    queue.add(child to (depth + 1))
-                }
-            }
-        }
-
-        if (matches.isEmpty()) return null
-
-        // приоритет кнопкам
-        matches
-            .filter { it.first.className?.toString()?.contains("button", true) == true }
-            .minByOrNull { it.second }
-            ?.let { return it.first }
-
-        // затем кликабельные
-        matches
-            .filter { it.first.isClickable }
-            .minByOrNull { it.second }
-            ?.let { return it.first }
-
-        return matches.minByOrNull { it.second }?.first
-    }
-
-    private fun clickNodeOrParents(
-        startNode: AccessibilityNodeInfo,
-        maxDepth: Int = 20
-    ): Boolean {
-        var current: AccessibilityNodeInfo? = startNode
-        var depth = 0
-        val visited = mutableSetOf<Int>()
-
-        while (current != null && depth < maxDepth) {
-            val idHash = System.identityHashCode(current)
-            if (!visited.add(idHash)) {
-                logScenario?.w(TAG, "Cycle detected in Accessibility tree (clickNodeOrParents), aborting")
-                return false
-            }
-
-            val cls = current.className
-            val txt = current.text
-            val clickableFlag = current.isClickable
-
-            logScenario?.i(TAG, "Try to click: depth=$depth cls=$cls txt=$txt clickable=$clickableFlag")
-
-            val ok = current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            if (ok) {
-                logScenario?.i(TAG, "performAction(ACTION_CLICK) success on depth=$depth cls=$cls")
-                return true
-            }
-
-            current = current.parent
-            depth++
-        }
-
-        logScenario?.i(TAG, "Failed to click the node or any parent (maxDepth=$maxDepth)")
-        return false
     }
 
     // --- ОЖИДАНИЕ ТЕКСТА ---
@@ -1323,9 +1126,8 @@ class MyAccessibilityService : AccessibilityService() {
             try {
                 val root = rootInActiveWindow
                 if (root != null) {
-                    val node = findBestNodeByText(root, expected)
+                    val node = nodeFinder.findBestNodeByText(root, expected)
                     if (node != null) {
-                        //logScenario?.i(TAG, "waitForText: найден текст '$expected'")
                         setDebug(applicationContext.getString(R.string.found_expected_text, expected))
                         onFound()
                         return

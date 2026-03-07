@@ -39,6 +39,7 @@ import com.brain.tracscript.telemetry.Position
 import com.brain.tracscript.telemetry.RawGpsBus
 import com.brain.tracscript.telemetry.RawNmeaBus
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.round
 
@@ -135,7 +136,8 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
         val rawPos: Position? by RawGpsBus.lastRawPosition.collectAsState(initial = null)
         val rawErr: String? by RawGpsBus.lastRawError.collectAsState(initial = null)
-        val timeFmt = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US) }
+        //val timeFmt = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US) }
+
 
         val nmeaHealth by RawNmeaBus.lastHealth.collectAsState(initial = null)
         val nmeaSentence by RawNmeaBus.lastSentence.collectAsState(initial = null)
@@ -161,6 +163,16 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
         val savedImei = remember { getOrCreateValidImei(prefs) }
         var imeiInput by remember { mutableStateOf(savedImei) }
         var imeiTouched by remember { mutableStateOf(false) }
+
+        val timeFmtLocal = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US) }
+
+        /*
+        val timeFmtUtc = remember {
+            SimpleDateFormat("yyyy-MM-dd HH:mm:ss 'UTC'", Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }
+        }
+        */
 
         LaunchedEffect(Unit) {
             imeiInput = getOrCreateValidImei(prefs)
@@ -953,7 +965,11 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     val latText = "%.6f".format(Locale.US, p.latitude)
                     val lonText = "%.6f".format(Locale.US, p.longitude)
                     val satsText = p.sats.toString()
-                    val timeText = timeFmt.format(p.time)
+                    //val timeText = timeFmtLocal.format(p.time)
+
+                    val sysTimeText = timeFmtLocal.format(p.time)
+                    val locationTimeText = p.locationTime?.let { timeFmtLocal.format(it) } ?: "—"
+
                     val accText = "%.1f".format(Locale.US, p.accuracy)
                     val speedText = "%.1f".format(Locale.US, p.speed)
 
@@ -963,7 +979,8 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                             latText,
                             lonText,
                             satsText,
-                            timeText,
+                            sysTimeText,
+                            locationTimeText,
                             accText,
                             speedText
                         ),
@@ -994,6 +1011,8 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     val now = System.currentTimeMillis()
                     val nmeaAlive = h.isNmeaAlive(now)
                     val fixAlive = h.isFixAlive(now)
+
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     val nmeaStatus = if (nmeaAlive) stringResource(R.string.status_ok) else stringResource(R.string.status_no)
                     val fixStatus = if (fixAlive) stringResource(R.string.status_yes) else stringResource(R.string.status_no)

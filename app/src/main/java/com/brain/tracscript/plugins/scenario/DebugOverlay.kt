@@ -186,9 +186,15 @@ class DebugOverlay(
                         "Tap x=$x y=$y  (rx=${"%.3f".format(rx)} ry=${"%.3f".format(ry)})"
 
                     val svc = service as? MyAccessibilityService
-                    val root = service.rootInActiveWindow
-                    val node = svc?.findNodeAtPosition(root, x, y)
-                    val treeDump = svc?.dumpFullTreeFrom(node) ?: "node=null"
+
+                    val node = svc?.inspectorFindNodeAt(x, y)
+
+                    val treeDump = if (svc != null) {
+                        val dump = svc.inspectorDumpTree(node)
+                        if (node == null) dump + "\n" + svc.inspectorDumpWindows(x, y) else dump
+                    } else {
+                        "service is not MyAccessibilityService"
+                    }
 
                     val shortClass = node?.className ?: "null"
                     val shortText = (node?.text ?: node?.contentDescription ?: "").toString()

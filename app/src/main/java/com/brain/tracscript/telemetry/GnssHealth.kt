@@ -218,11 +218,12 @@ class NmeaMonitor(
         }
 
         if (isRmc) {
-            // $GxRMC: status(2) A/V
             val p = trimmed.split(',')
-            if (p.size > 3) {
+            if (p.size > 9) {
                 rmcValid = (p[2] == "A")
-                if (rmcValid == true) lastFixTime = max(lastFixTime, nowWall)
+                if (rmcValid == true) {
+                    lastFixTime = max(lastFixTime, nowWall)
+                }
             }
         }
 
@@ -241,5 +242,30 @@ class NmeaMonitor(
 
         // 5) UI/BUS — не чаще 1 Гц
         pushUiThrottled(null)
+    }
+
+    private fun parseRmcUtcMillis(timeStr: String?, dateStr: String?): Long? {
+        val t = timeStr?.trim().orEmpty()
+        val d = dateStr?.trim().orEmpty()
+        if (t.length < 6 || d.length != 6) return null
+
+        val hh = t.substring(0, 2).toIntOrNull() ?: return null
+        val mm = t.substring(2, 4).toIntOrNull() ?: return null
+        val ss = t.substring(4, 6).toIntOrNull() ?: return null
+
+        val dd = d.substring(0, 2).toIntOrNull() ?: return null
+        val mo = d.substring(2, 4).toIntOrNull() ?: return null
+        val yy = d.substring(4, 6).toIntOrNull() ?: return null
+        val year = if (yy <= 79) 2000 + yy else 1900 + yy
+
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+        cal.set(java.util.Calendar.YEAR, year)
+        cal.set(java.util.Calendar.MONTH, mo - 1)
+        cal.set(java.util.Calendar.DAY_OF_MONTH, dd)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, hh)
+        cal.set(java.util.Calendar.MINUTE, mm)
+        cal.set(java.util.Calendar.SECOND, ss)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
     }
 }

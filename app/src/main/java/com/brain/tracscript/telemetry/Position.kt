@@ -7,6 +7,9 @@ data class Position(
     val id: Long = 0,
     val deviceId: String,
     val time: Date,
+    // время из android.location.Location (UTC millis), то что приходит от Location
+    val locationTime: Date? = null,
+
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
     val altitude: Double = 0.0,
@@ -22,7 +25,12 @@ data class Position(
 
     constructor(deviceId: String, location: Location, battery: BatteryStatus) : this(
         deviceId = deviceId,
-        time = Date(location.time.correctRollover()),
+        //time = Date(location.time.correctRollover()),
+        time = Date(System.currentTimeMillis()),
+
+        // время из Location (с rollover-фиксом, если надо)
+        locationTime = Date(location.time.correctRollover()),
+
         latitude = location.latitude,
         longitude = location.longitude,
         altitude = location.altitude,
