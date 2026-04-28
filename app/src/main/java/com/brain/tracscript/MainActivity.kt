@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.brain.tracscript.core.PluginSettingsDefinition
 import com.brain.tracscript.core.PluginSettingsRegistry
+import com.brain.tracscript.security.rememberAdminGate
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
@@ -133,6 +134,7 @@ fun MainScreen(
 
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
+    val gate = rememberAdminGate()
     val prefsUi = remember {
         context.getSharedPreferences(PREF_UI, Context.MODE_PRIVATE)
     }
@@ -269,15 +271,16 @@ fun MainScreen(
                                 ) {
                                     Button(
                                         onClick = {
+                                            gate {
+                                                markReturnedFromSettings(context)
 
-                                            markReturnedFromSettings(context)
-
-                                            context.startActivity(
-                                                Intent(
-                                                    context,
-                                                    PluginSettingsActivity::class.java
+                                                context.startActivity(
+                                                    Intent(
+                                                        context,
+                                                        PluginSettingsActivity::class.java
+                                                    )
                                                 )
-                                            )
+                                            }
                                         }
                                     ) {
                                         Icon(
@@ -324,7 +327,7 @@ fun MainScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedButton(
-                onClick = onOpenSettings,
+                onClick = { gate { onOpenSettings() } },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)

@@ -34,6 +34,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import com.brain.tracscript.R
 import com.brain.tracscript.plugins.scenario.InspectorDumpActivity
+import com.brain.tracscript.security.AdminAuth
+import com.brain.tracscript.security.PasswordSetupDialog
 
 
 class SettingsActivity : ComponentActivity() {
@@ -129,6 +131,38 @@ private fun SettingsScreen(
                 },
                 text = stringResource(R.string.prevent_screen_off)
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ─── Безопасность ───
+            Text(
+                text = "Безопасность",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            var passwordDialogOpen by remember { mutableStateOf(false) }
+            var passwordSetTick by remember { mutableIntStateOf(0) }
+            val passwordSet = remember(passwordSetTick) { AdminAuth.isPasswordSet(context) }
+
+            OutlinedButton(
+                onClick = { passwordDialogOpen = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Text(if (passwordSet) "Изменить пароль администратора" else "Задать пароль администратора")
+            }
+
+            if (passwordDialogOpen) {
+                PasswordSetupDialog(
+                    onClose = {
+                        passwordDialogOpen = false
+                        passwordSetTick++
+                    }
+                )
+            }
         }
 
         // Открыть настройки плагинов

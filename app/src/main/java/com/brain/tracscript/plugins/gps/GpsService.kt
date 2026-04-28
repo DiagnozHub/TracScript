@@ -31,7 +31,10 @@ import com.brain.tracscript.telemetry.ParamType
 import com.brain.tracscript.telemetry.PositionParam
 import com.brain.tracscript.telemetry.RawGpsBus
 import com.brain.tracscript.telemetry.TelemetryRepository
+import com.brain.tracscript.plugins.gps.wialon.WialonInbound
+import com.brain.tracscript.plugins.gps.wialon.WialonProtocolSender
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 import java.util.Locale
 import kotlin.coroutines.CoroutineContext
 
@@ -82,6 +85,10 @@ class GpsService : Service(), CoroutineScope {
     private var gpsWakeLock: PowerManager.WakeLock? = null
     private var lastWakeLockRenewElapsed = 0L
     private var protocolSender: GpsProtocolSender? = null
+    private var wialonInboundJob: Job? = null
+    private var wialonKeepConnectedJob: Job? = null
+    private var rollbackWatchdogJob: Job? = null
+    private var pendingRestartJob: Job? = null
 
     private lateinit var screenOnController: ScreenOnController
 
@@ -156,7 +163,10 @@ class GpsService : Service(), CoroutineScope {
 
         telemetryRepo = TelemetryRepository(applicationContext)
 
-        protocolSender = GpsProtocolFactory.create(cfg, telemetryRepo!!)
+        protocolSender = GpsProtocolFactory.create(applicationContext, cfg, telemetryRepo!!)
+
+        // Подписка на входящие события Wialon (UC и т.п.)
+        startWialonInboundSubscription()
 
         // Foreground-уведомление
         val notif = buildNotification(cfg)
@@ -339,6 +349,102 @@ class GpsService : Service(), CoroutineScope {
         workerJob = launch {
             runWorkerLoop()
         }
+
+        // Watchdog для отката удалённого конфига
+        rollbackWatchdogJob = launch {
+            while (isActive) {
+                delay(30_000L)
+                try {
+                    val rolled = RemoteConfigService.checkAndRollback(applicationContext)
+                    if (rolled) {
+                        logGps?.w(TAG, "remote config rolled back — restarting service")
+                        restartSelf()
+                        break
+                    }
+                } catch (e: Exception) {
+                    logGps?.e(TAG, "rollback watchdog error: ${e.message}", e)
+                }
+            }
+        }
+    }
+
+    /**
+     * Перезапуск сервиса, чтобы пересоздать GPS pipeline (provider+filter)
+     * с новой конфигурацией (gps_interval_sec / gps_min_distance_m / gps_min_angle_deg).
+     */
+    private fun restartSelf() {
+        val ctx = applicationContext
+        stopSelf()
+        android.os.Handler(mainLooper).postDelayed({
+            start(ctx)
+        }, 1500)
+    }
+
+    private fun startWialonInboundSubscription() {
+        wialonInboundJob?.cancel()
+        val sender = protocolSender as? WialonProtocolSender ?: return
+
+        // Держим TCP-соединение открытым всегда (а не лениво при первой отправке).
+        // Иначе при больших gps_interval_sec входящие команды от Wialon ждут,
+        // пока в БД не появится точка для отправки — это могут быть минуты.
+        wialonKeepConnectedJob?.cancel()
+        wialonKeepConnectedJob = launch {
+            while (isActive) {
+                try {
+                    sender.ensureConnected()
+                } catch (e: Exception) {
+                    logGps?.w(TAG, "wialon ensureConnected failed: ${e.message}")
+                }
+                delay(15_000L)
+            }
+        }
+
+        wialonInboundJob = launch {
+            sender.events.collect { ev ->
+                when (ev) {
+                    is WialonInbound.Message -> handleSingleCommand(ev.text)
+                    is WialonInbound.Ack -> {
+                        // зарезервировано для шага 5 (отслеживание AL для отката)
+                    }
+                    is WialonInbound.Disconnected -> {
+                        logGps?.i(TAG, "wialon disconnected: ${ev.reason}")
+                    }
+                    is WialonInbound.Trace -> {
+                        logGps?.i(TAG, "wialon ${ev.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun handleSingleCommand(text: String) {
+        logGps?.i(TAG, "wialon command: '$text'")
+        val res = RemoteConfigService.handleRemoteCommand(applicationContext, text)
+        when (res) {
+            is RemoteConfigService.Result.Applied -> {
+                logGps?.i(TAG, "command applied: ${res.applied} restart=${res.requiresRestart}")
+                if (res.requiresRestart) {
+                    scheduleDebouncedRestart()
+                }
+            }
+            is RemoteConfigService.Result.Rejected -> {
+                logGps?.w(TAG, "command rejected: ${res.reason}")
+            }
+        }
+    }
+
+    /**
+     * Откладываем рестарт на 5 секунд: каждая новая успешная команда
+     * сбрасывает таймер. Так пачка одиночных команд приведёт к одному рестарту,
+     * а не к пяти.
+     */
+    private fun scheduleDebouncedRestart() {
+        pendingRestartJob?.cancel()
+        pendingRestartJob = launch {
+            delay(5_000L)
+            logGps?.i(TAG, "debounced restart now")
+            restartSelf()
+        }
     }
 
     private fun buildNotification(cfg: GpsConfig): Notification {
@@ -394,6 +500,18 @@ class GpsService : Service(), CoroutineScope {
         workerJob?.cancel()
         workerJob = null
 
+        wialonInboundJob?.cancel()
+        wialonInboundJob = null
+
+        wialonKeepConnectedJob?.cancel()
+        wialonKeepConnectedJob = null
+
+        rollbackWatchdogJob?.cancel()
+        rollbackWatchdogJob = null
+
+        pendingRestartJob?.cancel()
+        pendingRestartJob = null
+
         positionProvider?.stopUpdates()
         positionProvider = null
 
@@ -421,6 +539,18 @@ class GpsService : Service(), CoroutineScope {
         logGps?.i(TAG, "GPS worked started")
 
         var lastNavTime = 0L
+        var transientBackoffMs = 1_000L
+        val transientBackoffCapMs = 60_000L
+
+        fun nextBackoff(): Long {
+            val cur = transientBackoffMs
+            transientBackoffMs = (transientBackoffMs * 2).coerceAtMost(transientBackoffCapMs)
+            return cur
+        }
+
+        fun resetBackoff() {
+            transientBackoffMs = 1_000L
+        }
 
         while (isActive) {
 
@@ -505,6 +635,8 @@ class GpsService : Service(), CoroutineScope {
                         lastNavTime = navTimeCandidate
 
                         logGps?.i(TAG, "CORE sent OK id=${core.id} gpsId=${bestGps?.id}")
+                        resetBackoff()
+                        RemoteConfigService.markSendOk(applicationContext)
 
                         // успех -> помечаем core как отправленный
                         repo.markCoreEventSent(core.id)
@@ -521,12 +653,13 @@ class GpsService : Service(), CoroutineScope {
                     } catch (e: Exception) {
 
                         if (isTransientNetworkError(e)) {
+                            val wait = nextBackoff()
                             logGps?.e(
                                 TAG,
-                                "CORE send FAILED (network, keep queued) id=${core.id} err=${e.message}",
+                                "CORE send FAILED (network, keep queued) id=${core.id} backoff=${wait}ms err=${e.message}",
                                 e
                             )
-                            delay(30_000L)
+                            delay(wait)
                         } else {
                             logGps?.e(
                                 TAG,
@@ -556,6 +689,8 @@ class GpsService : Service(), CoroutineScope {
                             TAG,
                             "GPS sent OK id=${gps.id} lat=${gps.latitude} lon=${gps.longitude}"
                         )
+                        resetBackoff()
+                        RemoteConfigService.markSendOk(applicationContext)
 
                         // успех -> помечаем
                         repo.markGpsPositionSent(gps.id)
@@ -569,12 +704,13 @@ class GpsService : Service(), CoroutineScope {
 
                         if (isTransientNetworkError(e)) {
                             // СЕТЬ/ТАЙМАУТ -> НЕ помечаем sent, иначе потеряешь точку
+                            val wait = nextBackoff()
                             logGps?.e(
                                 TAG,
-                                "GPS send FAILED (network, keep queued) id=${gps.id} err=${e.message}",
+                                "GPS send FAILED (network, keep queued) id=${gps.id} backoff=${wait}ms err=${e.message}",
                                 e
                             )
-                            delay(10_000L)
+                            delay(wait)
                         } else {
                             // НЕ сеть -> считаем перманентным, чтобы очередь не клинила
                             logGps?.e(

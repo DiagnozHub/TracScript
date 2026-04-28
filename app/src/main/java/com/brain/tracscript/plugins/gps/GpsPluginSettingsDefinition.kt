@@ -12,6 +12,8 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -34,6 +36,7 @@ import com.brain.tracscript.core.BusEvents
 import com.brain.tracscript.core.DataBusEvent
 import com.brain.tracscript.core.PluginSettingsDefinition
 import com.brain.tracscript.core.TracScriptApp
+import com.brain.tracscript.security.AdminAuth
 import com.brain.tracscript.telemetry.MotionBus
 import com.brain.tracscript.telemetry.Position
 import com.brain.tracscript.telemetry.RawGpsBus
@@ -197,6 +200,27 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                 prefs.getFloat(KEY_GPS_MIN_ANGLE_DEG, DEFAULT_GPS_MIN_ANGLE_DEG)
                     .toString().removeSuffix(".0")
             )
+        }
+
+        // Реакция UI на удалённое изменение префов (Wialon UC / произвольная команда).
+        // Без этого UI обновляется только при пересоздании Composable (уход-возврат).
+        DisposableEffect(prefs) {
+            val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+                when (key) {
+                    KEY_GPS_INTERVAL_SEC ->
+                        intervalSecText = sp.getInt(KEY_GPS_INTERVAL_SEC, DEFAULT_GPS_INTERVAL_SEC).toString()
+                    KEY_GPS_MIN_DISTANCE_M ->
+                        minDistanceText = sp.getFloat(KEY_GPS_MIN_DISTANCE_M, DEFAULT_GPS_MIN_DISTANCE_M)
+                            .toString().removeSuffix(".0")
+                    KEY_GPS_MIN_ANGLE_DEG ->
+                        minAngleText = sp.getFloat(KEY_GPS_MIN_ANGLE_DEG, DEFAULT_GPS_MIN_ANGLE_DEG)
+                            .toString().removeSuffix(".0")
+                }
+            }
+            prefs.registerOnSharedPreferenceChangeListener(listener)
+            onDispose {
+                prefs.unregisterOnSharedPreferenceChangeListener(listener)
+            }
         }
 
         var protocol by remember {
@@ -616,13 +640,38 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.enabled), modifier = Modifier.weight(1f))
-                Switch(
-                    checked = uiEnabled,
-                    enabled = !pendingEnable,
-                    onCheckedChange = { checked ->
-                        onUserToggleEnable(checked)
+
+                // Защита паролем: если пароль задан и сессия НЕ разблокирована —
+                // делаем Switch недоступным и над ним кладём прозрачную клик-зону,
+                // которая показывает Toast-подсказку.
+                val sessionUnlocked by AdminAuth.sessionUnlocked.collectAsState()
+                val authLocked = AdminAuth.isPasswordSet(context) && !sessionUnlocked
+
+                Box {
+                    Switch(
+                        checked = uiEnabled,
+                        enabled = !pendingEnable && !authLocked,
+                        onCheckedChange = { checked ->
+                            onUserToggleEnable(checked)
+                        }
+                    )
+                    if (authLocked) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    Toast.makeText(
+                                        context,
+                                        "Введите пароль администратора в общих настройках, чтобы изменить эту настройку",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                        )
                     }
-                )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

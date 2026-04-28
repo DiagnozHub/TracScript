@@ -1,12 +1,27 @@
 package com.brain.tracscript.plugins.gps.wialon
 
 import com.brain.tracscript.plugins.gps.GpsSendBlockedException
+import android.util.Log
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
-import java.io.BufferedWriter
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.BufferedInputStream
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.OutputStream
+import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.charset.Charset
@@ -19,28 +34,26 @@ import java.util.TimeZone
  * Навигационные данные для D-пакета.
  */
 data class NavData(
-    val lat1: String,   // "5544.6025"
-    val lat2: String,   // "N" / "S"
-    val lon1: String,   // "03739.6834"
-    val lon2: String,   // "E" / "W"
-    val speed: String,  // "0"
-    val course: String, // "0"
-    val alt: String,    // "0"
-    val sats: String,   // "5"
-    //val date: String? = null, // "ddMMyy" или null → текущее UTC
+    val lat1: String,
+    val lat2: String,
+    val lon1: String,
+    val lon2: String,
+    val speed: String,
+    val course: String,
+    val alt: String,
+    val sats: String,
     val timeMillis: Long
-    //val time: String? = null  // "HHmmss" или null → текущее UTC
 )
 
 /**
  * Доп. данные для D-пакета.
  */
 data class DExtras(
-    val hdop: String,    // "1.0"
-    val inputs: String,  // "0"
-    val outputs: String, // "0"
-    val adc: String,     // "0,0,0,0" или ""
-    val ibutton: String  // "NA"
+    val hdop: String,
+    val inputs: String,
+    val outputs: String,
+    val adc: String,
+    val ibutton: String
 )
 
 /**
@@ -48,7 +61,7 @@ data class DExtras(
  * name:type:value
  *
  * type:
- *  1 – целое, 2 – вещественное, 3 – строка, 4 – bool, 5 – hex и т.д.
+ *  1 – целое, 2 – вещественное, 3 – строка
  */
 data class IpsParam(
     val name: String,
@@ -56,43 +69,114 @@ data class IpsParam(
     val value: String
 )
 
+/**
+ * Входящие события от сервера.
+ */
+sealed class WialonInbound {
+    data class Ack(val type: String, val body: String) : WialonInbound()
+    /** Произвольное M-сообщение от сервера. */
+    data class Message(val text: String) : WialonInbound()
+    data class Disconnected(val reason: String?) : WialonInbound()
+    /** Отладочные сообщения (любая входящая строка, неизвестные типы и т.п.). */
+    data class Trace(val message: String) : WialonInbound()
+}
+
 class WialonIpsClient(
     private val host: String,
     private val port: Int,
     private val protocolVersion: String = "2.0",
-    private val socketTimeoutMs: Int = 5000
+    private val connectTimeoutMs: Int = 5000,
+    private val ackTimeoutMs: Long = 15_000L,
+    // 25 секунд — безопасное значение для мобильных NAT (типичный таймаут 30–60с).
+    // Если делать реже, при больших gps_interval_sec входящие команды от Wialon будут
+    // задерживаться: NAT-сессия закрывается, и пакет от сервера теряется до момента,
+    // когда устройство само пошлёт следующий D-пакет.
+    private val pingIntervalMs: Long = 25_000L
 ) {
-    /**
-     * Всё в ASCII.
-     * Любые не-ASCII символы (русский, emoji) превратятся в '?'.
-     * CRC считаем по тем же байтам, что реально уходят в сокет.
-     */
+
     private val WIALON_CHARSET: Charset = Charsets.US_ASCII
+
+    @Volatile private var socket: Socket? = null
+    @Volatile private var inputStream: BufferedInputStream? = null
+    @Volatile private var outputStream: OutputStream? = null
+    @Volatile private var clientScope: CoroutineScope? = null
+    @Volatile private var readerJob: Job? = null
+    @Volatile private var pingJob: Job? = null
+
+    private val sendMutex = Mutex()
+    private val ackChannel = Channel<Pair<String, String>>(capacity = 32)
+
+    private val _events = MutableSharedFlow<WialonInbound>(
+        replay = 0,
+        extraBufferCapacity = 16
+    )
+    val events: SharedFlow<WialonInbound> = _events
+
+    val isConnected: Boolean
+        get() {
+            val s = socket ?: return false
+            return s.isConnected && !s.isClosed
+        }
 
     // ==================== ПУБЛИЧНЫЕ МЕТОДЫ ====================
 
     /**
-     * Отправить один текст как параметр с именем "msg", типом 3 (строка).
+     * Установить TCP-соединение и пройти L-логин.
+     * Бросает GpsSendBlockedException при отказе сервера.
+     * При сетевой ошибке — IOException.
      */
-    /*
-    suspend fun sendText(
-        imei: String,
-        password: String,
-        message: String,
-        nav: NavData,
-        extras: DExtras
-    ): String? = sendParams(
-        imei = imei,
-        password = password,
-        params = listOf(IpsParam(name = "msg", type = 3, value = message)),
-        nav = nav,
-        extras = extras
-    )
-    */
+    suspend fun connect(imei: String, password: String) = withContext(Dispatchers.IO) {
+        if (isConnected) return@withContext
+
+        disconnectInternal("reconnect")
+
+        val s = openSocketWithFallback()
+        s.soTimeout = 0
+
+        socket = s
+        inputStream = BufferedInputStream(s.getInputStream())
+        outputStream = s.getOutputStream()
+
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        clientScope = scope
+
+        readerJob = scope.launch { runReader() }
+
+        val loginPacket = buildLoginPacket(imei, password)
+        try {
+            sendMutex.withLock {
+                writeRaw(loginPacket.toByteArray(WIALON_CHARSET))
+            }
+        } catch (e: Exception) {
+            disconnectInternal("login_write_failed: ${e.message}")
+            throw e
+        }
+
+        val ack = waitFor("AL")
+            ?: run {
+                disconnectInternal("login_timeout")
+                throw GpsSendBlockedException("Wialon login timeout")
+            }
+
+        if (ack.trim() != "1") {
+            disconnectInternal("login_rejected")
+            throw GpsSendBlockedException("Wialon login failed: resp=#AL#$ack")
+        }
+
+        pingJob = scope.launch { runPing() }
+    }
 
     /**
-     * Логинимся и отправляем один D-пакет с ЛЮБЫМ количеством параметров.
-     * Каждый параметр: name:type:value
+     * Закрыть соединение.
+     */
+    suspend fun disconnect() = withContext(Dispatchers.IO) {
+        disconnectInternal("explicit")
+    }
+
+    /**
+     * Отправить один D-пакет с параметрами и дождаться #AD#.
+     * При отсутствии соединения — выполнит connect.
+     * Возвращает строку ответа в формате "#AD#<code>" или null, если не дождались.
      */
     suspend fun sendParams(
         imei: String,
@@ -102,113 +186,242 @@ class WialonIpsClient(
         extras: DExtras
     ): String? = withContext(Dispatchers.IO) {
 
-        val socket = Socket()
+        if (!isConnected) connect(imei, password)
+
+        val dPacket = buildDPacketWithParams(params, nav, extras)
+
         try {
-            socket.connect(InetSocketAddress(host, port), socketTimeoutMs)
-            socket.soTimeout = socketTimeoutMs   // таймаут на readLine
-
-            val writer = BufferedWriter(
-                OutputStreamWriter(socket.getOutputStream(), WIALON_CHARSET)
-            )
-            val reader = BufferedReader(
-                InputStreamReader(socket.getInputStream(), WIALON_CHARSET)
-            )
-
-            // 1) Login
-            val loginPacket = buildLoginPacket(imei, password)
-            writer.write(loginPacket)
-            writer.flush()
-
-            val loginResp = reader.readLine()
-            val loginOk = loginResp?.trim() == "#AL#1"
-
-            if (!loginOk) {
-                // Критично: логин не прошёл -> НЕ шлём D-пакет
-                // и даём наружу явную ошибку, чтобы пакет не удалили из БД
-                throw GpsSendBlockedException("Wialon login failed: resp=$loginResp")
+            sendMutex.withLock {
+                writeRaw(dPacket.toByteArray(WIALON_CHARSET))
             }
-
-            // 2) D-пакет с параметрами
-            val dPacket = buildDPacketWithParams(params, nav, extras)
-            writer.write(dPacket)
-            writer.flush()
-
-            val dResp = reader.readLine()
-            dResp
-        } finally {
-            try { socket.close() } catch (_: Exception) {}
+        } catch (e: Exception) {
+            disconnectInternal("d_write_failed: ${e.message}")
+            throw e
         }
-    }
 
+        val ack = waitFor("AD")
+            ?: throw IOException("Wialon AD timeout")
+
+        "#AD#$ack"
+    }
 
     /**
-     * Построение эталонного тестового D-пакета.
-     * Используется для диагностики CRC / структуры пакета.
-     *
-     * Примерный состав:
-     *  - дата/время текущие UTC
-     *  - фиктивные координаты
-     *  - 3 коротких параметра test_0, test_1, test_2
-     *
-     * Возвращает строку полного пакета #D#...CRC\r\n
+     * Резолвит host в список адресов и пробует подключиться по очереди:
+     * сначала все IPv4, затем все IPv6. Это спасает от ситуаций,
+     * когда DNS отдаёт NAT64-адрес IPv6 (`64:ff9b::...`), а оператор его блэкхолит.
      */
-    /*
-    fun buildTestPacket(): String {
-        // Навигация — статические тестовые значения
-        val dateTime = getUtcDateTime()
-        val dateStr = dateTime.first
-        val timeStr = dateTime.second
+    private fun openSocketWithFallback(): Socket {
+        val addrs: Array<InetAddress> = try {
+            InetAddress.getAllByName(host)
+        } catch (e: Exception) {
+            throw IOException("DNS resolve failed for '$host': ${e.message}", e)
+        }
+        if (addrs.isEmpty()) throw IOException("DNS returned no addresses for '$host'")
 
-        val lat1 = "5544.0000"
-        val lat2 = "N"
-        val lon1 = "03739.0000"
-        val lon2 = "E"
-        val speed = "0"
-        val course = "0"
-        val alt = "0"
-        val sats = "5"
-
-        // Простые extras
-        val hdop = "1.0"
-        val inputs = "0"
-        val outputs = "0"
-        val adc = ""
-        val ibutton = "NA"
-
-        // Короткие эталонные текстовые параметры
-        val paramsStr = listOf(
-            "test_0:3:hello",
-            "test_1:3:world",
-            "test_2:3:3:Retarder, Exhaust, Engine #1 | Normalno"
-        ).joinToString(",")
-
-        // Формирование тела пакета (как в IPS 2.0)
-        val body = buildString {
-            append(dateStr).append(';')
-            append(timeStr).append(';')
-            append(lat1).append(';')
-            append(lat2).append(';')
-            append(lon1).append(';')
-            append(lon2).append(';')
-            append(speed).append(';')
-            append(course).append(';')
-            append(alt).append(';')
-            append(sats).append(';')
-            append(hdop).append(';')
-            append(inputs).append(';')
-            append(outputs).append(';')
-            append(adc).append(';')
-            append(ibutton).append(';')
-            append(paramsStr).append(';')
+        val sorted = addrs.sortedBy { if (it is Inet4Address) 0 else 1 }
+        val perAddrTimeout = if (sorted.size > 1) {
+            (connectTimeoutMs / sorted.size).coerceAtLeast(2000)
+        } else {
+            connectTimeoutMs
         }
 
-        // CRC по ASCII-байтам body
-        val crc = crc16String(body)
-        val crcHex = String.format(Locale.US, "%04X", crc)
-
-        return "#D#$body$crcHex\r\n"
+        var lastErr: Exception? = null
+        for (addr in sorted) {
+            val s = Socket()
+            try {
+                s.connect(InetSocketAddress(addr, port), perAddrTimeout)
+                try { s.keepAlive = true } catch (_: Throwable) {}
+                Log.i(TAG, "connected to ${addr.hostAddress}:$port")
+                return s
+            } catch (e: Exception) {
+                Log.w(TAG, "connect failed to ${addr.hostAddress}:$port — ${e.javaClass.simpleName}: ${e.message}")
+                try { s.close() } catch (_: Throwable) {}
+                lastErr = e
+            }
+        }
+        throw IOException(
+            "All ${sorted.size} addresses failed for '$host:$port'",
+            lastErr
+        )
     }
-    */
+
+    // ==================== ВНУТРЕННЕЕ ====================
+
+    private suspend fun waitFor(expectedType: String): String? {
+        return withTimeoutOrNull(ackTimeoutMs) {
+            var found: String? = null
+            while (found == null) {
+                val (type, body) = ackChannel.receive()
+                if (type == expectedType) {
+                    found = body
+                }
+            }
+            found
+        }
+    }
+
+    private suspend fun runReader() {
+        val ins = inputStream ?: return
+        try {
+            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                val line = readAsciiLine(ins) ?: break
+                if (line.isEmpty()) continue
+
+                _events.tryEmit(WialonInbound.Trace("rx: $line"))
+
+                if (!line.startsWith("#")) {
+                    // Wialon-овская «Произвольная команда»: сырой текст без #M#...#
+                    // По спеке IPS 2.0 (раздел «Команда "Отправить произвольное сообщение"»)
+                    // формат — просто Msg без обёртки. Ответ серверу не требуется.
+                    _events.tryEmit(WialonInbound.Message(line))
+                    continue
+                }
+
+                // #PT#body
+                val rest = line.substring(1)
+                val sep = rest.indexOf('#')
+                if (sep <= 0) {
+                    _events.tryEmit(WialonInbound.Trace("rx: no second '#', dropped"))
+                    continue
+                }
+
+                val type = rest.substring(0, sep)
+                val body = rest.substring(sep + 1)
+
+                when (type) {
+                    "UC" -> handleUcPacket(ins, body)
+                    "M" -> handleMPacket(body)
+                    "AL", "AD", "AP", "AM" -> {
+                        ackChannel.trySend(type to body)
+                    }
+                    else -> {
+                        _events.tryEmit(WialonInbound.Trace("rx: unknown type='$type' body='$body'"))
+                        ackChannel.trySend(type to body)
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            _events.tryEmit(WialonInbound.Trace("reader exception: ${t.javaClass.simpleName}: ${t.message}"))
+        } finally {
+            _events.tryEmit(WialonInbound.Disconnected("reader_stopped"))
+        }
+    }
+
+    private suspend fun runPing() {
+        try {
+            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                kotlinx.coroutines.delay(pingIntervalMs)
+                if (!isConnected) break
+                try {
+                    sendMutex.withLock {
+                        writeRaw("#P#\r\n".toByteArray(WIALON_CHARSET))
+                    }
+                } catch (e: Exception) {
+                    disconnectInternal("ping_failed: ${e.message}")
+                    break
+                }
+            }
+        } catch (_: Throwable) {
+            // cancelled
+        }
+    }
+
+    /**
+     * UC-пакет (загрузка файла конфигурации) больше не используется приложением.
+     * Если оператор случайно нажмёт «Загрузить конфигурацию» в Wialon CMS —
+     * сервер пришлёт `#UC#Sz;CRC\r\n` + Sz бинарных байт. Без этого drain-а
+     * Sz байт остались бы в потоке и reader попытался бы интерпретировать их
+     * как ASCII-строки, что засорило бы лог и в худшем случае случайно
+     * выполнило псевдо-M-команду, склеенную из мусора.
+     *
+     * Поэтому: парсим Sz, дочитываем ровно Sz байт и выкидываем. Без CRC,
+     * без публикации, без размерного лимита.
+     */
+    private fun handleUcPacket(ins: BufferedInputStream, header: String) {
+        val sz = header.split(';').firstOrNull()?.trim()?.toIntOrNull()
+        if (sz == null || sz < 0) {
+            Log.w(TAG, "UC drain: bad header '$header' — stream may desync")
+            return
+        }
+        Log.i(TAG, "UC drain: discarding $sz bytes (config upload disabled)")
+        var left = sz
+        val buf = ByteArray(512)
+        while (left > 0) {
+            val r = ins.read(buf, 0, minOf(buf.size, left))
+            if (r <= 0) return
+            left -= r
+        }
+    }
+
+    /**
+     * Обработка M-пакета (произвольное сообщение от сервера).
+     * Формат body: "Msg;CRC16" — Msg извлекаем как всё до последнего ';'.
+     * По спеке надо ответить #AM#1 — иначе Wialon будет ретраить.
+     */
+    private suspend fun handleMPacket(body: String) {
+        val lastSep = body.lastIndexOf(';')
+        val msg = if (lastSep > 0) body.substring(0, lastSep) else body
+
+        Log.i(TAG, "M-packet received: '$msg'")
+
+        try {
+            sendMutex.withLock {
+                writeRaw("#AM#1\r\n".toByteArray(WIALON_CHARSET))
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "M-ack write failed: ${e.message}")
+        }
+
+        _events.tryEmit(WialonInbound.Message(msg))
+    }
+
+    companion object {
+        private const val TAG = "WialonIpsClient"
+    }
+
+    private fun readAsciiLine(ins: BufferedInputStream): String? {
+        val buf = ByteArrayOutputStream(64)
+        while (true) {
+            val b = ins.read()
+            if (b == -1) {
+                return if (buf.size() == 0) null else buf.toString(Charsets.US_ASCII.name())
+            }
+            if (b == 0x0D) {
+                val nxt = ins.read()
+                if (nxt == 0x0A || nxt == -1) {
+                    return buf.toString(Charsets.US_ASCII.name())
+                }
+                buf.write(nxt)
+            } else if (b == 0x0A) {
+                return buf.toString(Charsets.US_ASCII.name())
+            } else {
+                buf.write(b)
+            }
+        }
+    }
+
+    private fun writeRaw(bytes: ByteArray) {
+        val os = outputStream ?: throw IOException("not connected")
+        os.write(bytes)
+        os.flush()
+    }
+
+    private fun disconnectInternal(reason: String?) {
+        try { pingJob?.cancel() } catch (_: Throwable) {}
+        pingJob = null
+        try { readerJob?.cancel() } catch (_: Throwable) {}
+        readerJob = null
+        try { clientScope?.cancel() } catch (_: Throwable) {}
+        clientScope = null
+        try { socket?.close() } catch (_: Throwable) {}
+        socket = null
+        inputStream = null
+        outputStream = null
+        while (ackChannel.tryReceive().isSuccess) { /* drain */ }
+        if (reason != null) {
+            _events.tryEmit(WialonInbound.Disconnected(reason))
+        }
+    }
 
     // ==================== СБОРКА ПАКЕТОВ ====================
 
@@ -223,16 +436,11 @@ class WialonIpsClient(
     }
 
     /**
-     * Запрещённые символы Wialon IPS:
-     * - '#' — ломает структуру пакета, сервер считает это началом нового пакета.
-     *
-     * Заменяем '#' на '№'.
+     * Запрещённые символы Wialon IPS.
      */
     private fun sanitizeValueForWialon(value: String): String {
         return value.replace("#", "N. ").replace(",", ".")
     }
-
-
 
     /**
      * D-пакет:
@@ -241,7 +449,6 @@ class WialonIpsClient(
      *    HDOP;Inputs;Outputs;ADC;Ibutton;
      *    name1:type1:value1,name2:type2:value2,...;CRC16\r\n
      */
-
     fun buildDPacketWithParams(
         params: List<IpsParam>,
         nav: NavData,
@@ -251,16 +458,10 @@ class WialonIpsClient(
 
         val paramsStr = params.joinToString(",") { p ->
             val safeName = toAsciiSafe(p.name)
-
-            // убираем запрещённый символ
             val cleanedValue = sanitizeValueForWialon(p.value)
-
-            // затем в ASCII
             val safeValue = toAsciiSafe(cleanedValue)
-
             "$safeName:${p.type}:$safeValue"
         }
-
 
         val body = buildString {
             append(dateStr).append(';')
@@ -287,13 +488,8 @@ class WialonIpsClient(
         return "#D#$body$crcHex\r\n"
     }
 
-
     // ==================== УТИЛИТЫ ====================
 
-    /**
-     * Обрезаем строку до печатного ASCII.
-     * Всё, что вне диапазона 0x20..0x7E, заменяем на '?'.
-     */
     private fun toAsciiSafe(input: String): String =
         buildString {
             for (ch in input) {
@@ -311,31 +507,18 @@ class WialonIpsClient(
         val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
         cal.timeInMillis = ts
 
-        val day   = cal.get(java.util.Calendar.DAY_OF_MONTH)
+        val day = cal.get(java.util.Calendar.DAY_OF_MONTH)
         val month = cal.get(java.util.Calendar.MONTH) + 1
-        val year  = cal.get(java.util.Calendar.YEAR) % 100
+        val year = cal.get(java.util.Calendar.YEAR) % 100
 
-        val hour  = cal.get(java.util.Calendar.HOUR_OF_DAY)
-        val min   = cal.get(java.util.Calendar.MINUTE)
-        val sec   = cal.get(java.util.Calendar.SECOND)
+        val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val min = cal.get(java.util.Calendar.MINUTE)
+        val sec = cal.get(java.util.Calendar.SECOND)
 
         val dateStr = String.format(Locale.US, "%02d%02d%02d", day, month, year)
         val timeStr = String.format(Locale.US, "%02d%02d%02d", hour, min, sec)
 
         return dateStr to timeStr
-    //val d = nav.date
-        //val t = nav.time
-        //return if (d != null && t != null) d to t else getUtcDateTime()
-    }
-
-    private fun getUtcDateTime(): Pair<String, String> {
-        val nowUtc = Date()
-        val dateFmt = SimpleDateFormat("ddMMyy", Locale.US)
-        val timeFmt = SimpleDateFormat("HHmmss", Locale.US)
-        val tz = TimeZone.getTimeZone("UTC")
-        dateFmt.timeZone = tz
-        timeFmt.timeZone = tz
-        return dateFmt.format(nowUtc) to timeFmt.format(nowUtc)
     }
 
     // ==================== CRC16 (0xA001, init 0x0000) ====================
