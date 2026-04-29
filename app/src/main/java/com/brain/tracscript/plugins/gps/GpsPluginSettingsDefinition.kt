@@ -202,6 +202,10 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
             )
         }
 
+        var motionThreshold by remember {
+            mutableStateOf(prefs.getFloat(KEY_MOTION_THRESHOLD, DEFAULT_MOTION_THRESHOLD))
+        }
+
         // Реакция UI на удалённое изменение префов (Wialon UC / произвольная команда).
         // Без этого UI обновляется только при пересоздании Composable (уход-возврат).
         DisposableEffect(prefs) {
@@ -215,6 +219,8 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                     KEY_GPS_MIN_ANGLE_DEG ->
                         minAngleText = sp.getFloat(KEY_GPS_MIN_ANGLE_DEG, DEFAULT_GPS_MIN_ANGLE_DEG)
                             .toString().removeSuffix(".0")
+                    KEY_MOTION_THRESHOLD ->
+                        motionThreshold = sp.getFloat(KEY_MOTION_THRESHOLD, DEFAULT_MOTION_THRESHOLD)
                 }
             }
             prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -271,10 +277,6 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
 
         fun saveMinAngle(value: Float) {
             prefs.edit().putFloat(KEY_GPS_MIN_ANGLE_DEG, value).apply()
-        }
-
-        var motionThreshold by remember {
-            mutableStateOf(prefs.getFloat(KEY_MOTION_THRESHOLD, DEFAULT_MOTION_THRESHOLD))
         }
 
         fun saveMotionThreshold(value: Float) {
@@ -937,7 +939,7 @@ object GpsPluginSettingsDefinition : PluginSettingsDefinition {
                         style = MaterialTheme.typography.bodySmall
                     )
 
-                    val minT = 0.20f
+                    val minT = 0.00f
                     val maxT = 10.00f
                     val step = 0.10f
                     val steps = ((maxT - minT) / step).toInt() - 1

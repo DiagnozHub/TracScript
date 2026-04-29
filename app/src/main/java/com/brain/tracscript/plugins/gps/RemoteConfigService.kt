@@ -27,6 +27,18 @@ object RemoteConfigService {
     private val ALLOWED_KEYS = setOf(
         GpsPluginSettingsDefinition.KEY_GPS_INTERVAL_SEC,
         GpsPluginSettingsDefinition.KEY_GPS_MIN_DISTANCE_M,
+        GpsPluginSettingsDefinition.KEY_GPS_MIN_ANGLE_DEG,
+        GpsPluginSettingsDefinition.KEY_MOTION_THRESHOLD
+    )
+
+    /**
+     * Подмножество ALLOWED_KEYS, которое требует перезапуска GpsService для применения
+     * (потому что значения читаются один раз при старте — например в positionProvider/gpsFilter).
+     * Остальные ключи подхватываются на лету (motion_threshold через motionCfgJob).
+     */
+    private val KEYS_REQUIRING_RESTART = setOf(
+        GpsPluginSettingsDefinition.KEY_GPS_INTERVAL_SEC,
+        GpsPluginSettingsDefinition.KEY_GPS_MIN_DISTANCE_M,
         GpsPluginSettingsDefinition.KEY_GPS_MIN_ANGLE_DEG
     )
 
@@ -174,8 +186,9 @@ object RemoteConfigService {
         editor.putString(PENDING_TEXT_KEY, "Param $key=$value applied")
         editor.apply()
 
-        Log.i(TAG, "single command applied: $key=$typed")
-        return Result.Applied(applied = mapOf(key to typed.toString()), requiresRestart = true)
+        val needsRestart = key in KEYS_REQUIRING_RESTART
+        Log.i(TAG, "single command applied: $key=$typed restart=$needsRestart")
+        return Result.Applied(applied = mapOf(key to typed.toString()), requiresRestart = needsRestart)
     }
 
     private fun reject(appContext: Context, reason: String): Result {
@@ -237,6 +250,11 @@ object RemoteConfigService {
                 if (f < 0f || f > 360f) return null
                 f
             }
+            GpsPluginSettingsDefinition.KEY_MOTION_THRESHOLD -> {
+                val f = value.toFloatOrNull() ?: return null
+                if (f < 0f || f > 10f) return null
+                f
+            }
             else -> null
         }
     }
@@ -263,6 +281,11 @@ object RemoteConfigService {
             .append(prefs.getFloat(
                 GpsPluginSettingsDefinition.KEY_GPS_MIN_ANGLE_DEG,
                 GpsPluginSettingsDefinition.DEFAULT_GPS_MIN_ANGLE_DEG
+            )).append('\n')
+        sb.append(GpsPluginSettingsDefinition.KEY_MOTION_THRESHOLD).append('=')
+            .append(prefs.getFloat(
+                GpsPluginSettingsDefinition.KEY_MOTION_THRESHOLD,
+                GpsPluginSettingsDefinition.DEFAULT_MOTION_THRESHOLD
             )).append('\n')
 
         try {
@@ -367,6 +390,8 @@ object RemoteConfigService {
                 GpsPluginSettingsDefinition.KEY_GPS_MIN_DISTANCE_M ->
                     v.toFloatOrNull()?.let { editor.putFloat(k, it) }
                 GpsPluginSettingsDefinition.KEY_GPS_MIN_ANGLE_DEG ->
+                    v.toFloatOrNull()?.let { editor.putFloat(k, it) }
+                GpsPluginSettingsDefinition.KEY_MOTION_THRESHOLD ->
                     v.toFloatOrNull()?.let { editor.putFloat(k, it) }
             }
         }

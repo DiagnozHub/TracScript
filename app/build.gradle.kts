@@ -1,3 +1,5 @@
+import com.android.build.api.variant.impl.VariantOutputImpl
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -12,8 +14,8 @@ android {
         applicationId = "com.brain.tracscript"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.9"
+        versionCode = 3
+        versionName = "1.0.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -36,6 +38,21 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+}
+
+// Кастомное имя APK: TracScript_<versionName с '.'→'_'>_<buildType>.apk
+//   например: TracScript_1_0_10_debug.apk, TracScript_1_0_10_release.apk
+androidComponents {
+    onVariants { variant ->
+        val versionName = android.defaultConfig.versionName ?: "unknown"
+        val safeVersion = versionName.replace('.', '_')
+        val buildType = variant.buildType ?: "unknown"
+        variant.outputs.forEach { output ->
+            (output as VariantOutputImpl).outputFileName.set(
+                "TracScript_${safeVersion}_${buildType}.apk"
+            )
+        }
     }
 }
 
